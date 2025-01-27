@@ -1,0 +1,56 @@
+@misc{dutta2024memoryaugmentedtransformersimplementlinear,
+      title={Memory-augmented Transformers can implement Linear First-Order Optimization Methods}, 
+      author={Sanchayan Dutta and Suvrit Sra},
+      year={2024},
+      eprint={2410.07263},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2410.07263}, 
+}
+
+@misc{wu2022memformermemoryaugmentedtransformersequence,
+      title={Memformer: A Memory-Augmented Transformer for Sequence Modeling}, 
+      author={Qingyang Wu and Zhenzhong Lan and Kun Qian and Jing Gu and Alborz Geramifard and Zhou Yu},
+      year={2022},
+      eprint={2010.06891},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2010.06891}, 
+}
+
+@misc{ahn2023transformerslearnimplementpreconditioned,
+      title={Transformers learn to implement preconditioned gradient descent for in-context learning}, 
+      author={Kwangjun Ahn and Xiang Cheng and Hadi Daneshmand and Suvrit Sra},
+      year={2023},
+      eprint={2306.00297},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2306.00297}, 
+}
+
+@misc{schlag2021lineartransformerssecretlyfast,
+      title={Linear Transformers Are Secretly Fast Weight Programmers}, 
+      author={Imanol Schlag and Kazuki Irie and Jürgen Schmidhuber},
+      year={2021},
+      eprint={2102.11174},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2102.11174}, 
+}
+
+
+@InProceedings{pmlr-v202-von-oswald23a,
+  title = 	 {Transformers Learn In-Context by Gradient Descent},
+  author =       {Von Oswald, Johannes and Niklasson, Eyvind and Randazzo, Ettore and Sacramento, Joao and Mordvintsev, Alexander and Zhmoginov, Andrey and Vladymyrov, Max},
+  booktitle = 	 {Proceedings of the 40th International Conference on Machine Learning},
+  pages = 	 {35151--35174},
+  year = 	 {2023},
+  editor = 	 {Krause, Andreas and Brunskill, Emma and Cho, Kyunghyun and Engelhardt, Barbara and Sabato, Sivan and Scarlett, Jonathan},
+  volume = 	 {202},
+  series = 	 {Proceedings of Machine Learning Research},
+  month = 	 {23--29 Jul},
+  publisher =    {PMLR},
+  pdf = 	 {https://proceedings.mlr.press/v202/von-oswald23a/von-oswald23a.pdf},
+  url = 	 {https://proceedings.mlr.press/v202/von-oswald23a.html},
+  abstract = 	 {At present, the mechanisms of in-context learning in Transformers are not well understood and remain mostly an intuition. In this paper, we suggest that training Transformers on auto-regressive objectives is closely related to gradient-based meta-learning formulations. We start by providing a simple weight construction that shows the equivalence of data transformations induced by 1) a single linear self-attention layer and by 2) gradient-descent (GD) on a regression loss. Motivated by that construction, we show empirically that when training self-attention-only Transformers on simple regression tasks either the models learned by GD and Transformers show great similarity or, remarkably, the weights found by optimization match the construction. Thus we show how trained Transformers become mesa-optimizers i.e. learn models by gradient descent in their forward pass. This allows us, at least in the domain of regression problems, to mechanistically understand the inner workings of in-context learning in optimized Transformers. Building on this insight, we furthermore identify how Transformers surpass the performance of plain gradient descent by learning an iterative curvature correction and learn linear models on deep data representations to solve non-linear regression tasks. Finally, we discuss intriguing parallels to a mechanism identified to be crucial for in-context learning termed induction-head (Olsson et al., 2022) and show how it could be understood as a specific case of in-context learning by gradient descent learning within Transformers.}
+}
