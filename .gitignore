@@ -169,3 +169,7 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 .DS_Store
+/.idea/.gitignore
+/.idea/llm_optimizer_diploma.iml
+/.idea/modules.xml
+/.idea/vcs.xml
