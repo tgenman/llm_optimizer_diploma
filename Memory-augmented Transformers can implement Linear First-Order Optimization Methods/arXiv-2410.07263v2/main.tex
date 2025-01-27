@@ -1,0 +1,934 @@
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+% Page geometry
+\usepackage[verbose=true,
+letterpaper,
+textheight=8.4in,
+textwidth=6.1in,
+margin=1in,
+headheight=12pt,
+headsep=25pt,
+footskip=30pt]{geometry}
+
+% Appendix and title formatting
+\usepackage[toc,page,header]{appendix}
+\usepackage{titletoc}
+
+% Font and microtype
+\usepackage{microtype}
+
+% Math packages
+\usepackage{amsmath, amssymb, amsfonts, amsxtra, bm}
+\usepackage{mathtools}
+\usepackage{amsthm}
+
+% Table packages
+\usepackage{booktabs}
+\usepackage{makecell,multirow} % Professional-quality tables
+\usepackage{nicefrac} % Compact symbols for 1/2, etc.
+\usepackage{colortbl}
+
+% Color and graphics
+\usepackage[usenames,dvipsnames]{xcolor}   
+\usepackage{graphicx}
+\usepackage{epstopdf}
+
+% Citation and referencing
+\usepackage[round]{natbib}
+\usepackage{hyperref}
+\usepackage{url}
+
+% Lists and formatting
+\usepackage{paralist}
+\usepackage{enumerate}
+\usepackage{enumitem}
+\usepackage{xspace}
+\usepackage{footnote, tablefootnote}
+
+% Algorithms
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% Miscellaneous
+\usepackage{comment}
+\usepackage{tikz}
+\usepackage{tcolorbox}
+\usepackage{bbm}
+
+\usepackage{graphicx}
+\usepackage{subcaption}
+
+\usepackage{float}
+\usepackage{placeins}
+
+% Customize table of contents
+\titlecontents{section}[3em]{\vspace{-1pt}}%
+    {\bfseries\contentslabel{2em}}% numbered sections
+    {}% numberless section
+    {\titlerule*[0.5pc]{.}\contentspage}%
+    
+\titlecontents{subsection}[5em]{\vspace{-1pt}}%
+    {\contentslabel{2em}}% numbered sections
+    {}% numberless section
+    {\titlerule*[0.5pc]{.}\contentspage}%
+
+\titlecontents{subsubsection}[5em]{\vspace{-1pt}}%
+    {\footnotesize\contentslabel{3em}}% numbered sections
+    {}% numberless section
+    {\titlerule*[0.5pc]{.}\contentspage}%
+
+\numberwithin{equation}{section}
+\setcounter{section}{0} 
+
+\usepackage{ss} % Custom package
+\input{arXivMacros} % Custom macros
+
+\newtheorem{proposition}{Proposition}
+\newenvironment{proofsketch}{\par\noindent\textit{Proof Sketch.}\ }{\hfill$\square$\par}
+
+\begin{document}
+
+\title{Memory-augmented Transformers can implement Linear First-Order Optimization Methods}
+
+\author{\name{Sanchayan Dutta}\email{dutta@ucdavis.edu}\\
+\addr{UC Davis, Davis CA, USA}\\
+%\name{Xiang Cheng} %\email{xiang.cheng@duke.edu}\\
+%\addr{Duke University, Durham, USA}\\[2pt]
+\name{Suvrit Sra} \email{s.sra@tum.de}\\
+\addr{TU Munich, Garching, Germany}
+}
+
+\maketitle
+
+\begin{abstract}
+We show that memory-augmented Transformers (\textbf{Memformers}) can implement linear first-order optimization methods such as conjugate gradient descent, momentum methods, and more generally, methods that linearly combine past gradients. Building on prior work that demonstrates how Transformers can simulate preconditioned gradient descent, we provide theoretical and empirical evidence that Memformers can learn more advanced optimization algorithms. Specifically, we analyze how memory registers in Memformers store suitable intermediate attention values allowing them to implement algorithms such as conjugate gradient. Our results show that Memformers can efficiently learn these methods by training on random linear regression tasks, even learning methods that outperform conjugate gradient. This work extends our knowledge about the algorithmic capabilities of Transformers, showing how they can learn complex optimization methods.
+\end{abstract}
+
+\section{Introduction}
+\label{Sect:Introduction}
+
+In-context learning (ICL) allows large language models (LLMs) to generate contextually appropriate outputs based solely on examples and queries provided in a prompt, without requiring any parameter adjustments~\citep{brown2020language, liu2021makes, lu2021fantastically, wei2022chain, wu2022self}. This remarkable ability has spurred research into understanding how Transformers can implement algorithms~\citep{achiam2023gpt, touvron2023llama}, with recent studies focusing on their capability to simulate optimization algorithms~\citep{dai2022can, von2023transformers, garg2022can, akyurek2022learning}. Transformers have been shown to implement gradient-based optimization during their forward pass, such as preconditioned gradient descent for linear regression tasks~\citep{dai2022can, mahankali2023one, ahn2024transformers}.
+
+More recently, studies have demonstrated that Transformers can learn even more advanced optimization methods. For instance, \citet{fu2023transformers} showed that Transformers exhibit convergence rates comparable to Iterative Newton's Method, a higher-order optimization technique that converges exponentially faster than gradient descent for in-context linear regression. Additionally, \citet{vladymyrov2024linear} proved that Transformers can, in fact, learn a variant of gradient descent that approximates second-order methods, such as \(\mathrm{GD}^{++}\), achieving convergence rates similar to Newton's method. These findings lead to the central question of our paper:
+
+\begin{center}
+    \emph{Can Transformers efficiently ``learn" more advanced gradient-based optimization methods?}
+\end{center}
+
+We aim to address this question by revealing some of the representational power of Transformers as ``algorithm learners,'' further motivating the use of machine learning for discovering new optimization algorithms. To make our investigation more precise, we focus on learning the class of gradient-based algorithms obtained by linearly combining past gradients, known as \emph{Linear First-Order Methods (LFOMs)}~\citep{goh2017why}, where the \((k+1)\)st iterate is
+\begin{equation}
+w^{k+1} = w^0 + \sum_{i=0}^k \Gamma_i^k \nabla f(w^i),
+\label{LFOM_definition}
+\end{equation}
+and where \(\{\Gamma_i^k\}_{i=0}^k\) are diagonal matrices. Model~\eqref{LFOM_definition} is quite general, as it includes, as special cases, standard methods such as gradient descent (GD), momentum GD, Nesterov's accelerated gradient, conjugate gradient, and in a stochastic setting, AdaGrad, ADAM, among others.
+
+By \textbf{``learning" an algorithm like CGD or LFOM}, we mean two key things:
+
+1. \textbf{\textit{The Memformer, in its forward pass, under certain internal parameter settings, can perform iterations of CGD and/or LFOM.}} This means that its architecture and parameterization are sufficiently expressive to execute these optimization methods as part of its computation.
+
+2. \textbf{\textit{The Memformer's learnable parameters can be trained on linear regression tasks. When using these learned parameters, which are shared across all in-context data samples in a batch, the Memformer can execute ``CGD-like" and ``LFOM-like" iterations during a forward pass.}} The surprising aspect lies in the Memformer's ability to achieve competitive—and in some cases even superior—performance compared to CGD, despite using a relatively small number of learned parameters shared across all test samples drawn independently of the training data.
+
+Our key insight for efficiently learning LFOMs is to leverage memory-augmented Transformers, known as \emph{Memformers}~\citep{wu2020Memformer, xu2021transformer}, which retain intermediate attention values across layers. This memory enables Memformers to store past gradients, facilitating the execution of advanced first-order methods such as conjugate gradient descent and momentum methods. The same mechanism allows Memformers to implement more general LFOMs.
+
+While unconditional learning of gradient methods remains out of reach, we build on related work demonstrating that Transformers can learn gradient descent in the context of linear regression tasks~\citep{garg2022can, akyurek2022learning, von2023transformers, ahn2024transformers, zhang2024trained}. Inspired by these findings, and extending the work of \citet{ahn2024transformers}, we conduct a theoretical analysis of the loss landscape for memory-augmented linear Transformers that omit softmax activation~\citep{schlag2021linear, von2023transformers, ahn2024transformers}.
+
+In the Appendix, we also include our experiments that Memformers can outperform Nesterov Accelerated Gradient (NAG) and momentum GD. In summary, our main contributions are as follows:
+
+\subsection*{Main Contributions}
+\begin{enumerate}[label=(\arabic*),leftmargin=3em]
+    \item \textbf{Theoretical justification that Memformers can implement LFOM iterations, including CGD.} We provide a rigorous theoretical framework showing that Memformers, when trained on linear regression tasks, can be configured to perform iterations of LFOMs in their forward pass, encompassing advanced algorithms like CGD. By leveraging their memory mechanisms, Memformers can store and effectively combine past gradients, enabling them to implement these sophisticated optimization methods within their architecture.
+
+    \item \textbf{Empirical evidence of Memformers ``learning'' optimization algorithms.} Through extensive experiments, we demonstrate that Memformers can \underline{learn LFOMs}, in a general sense, by training on random linear regression tasks. \textit{Remarkably, a Memformer utilizing a shared set of learned parameters is able to process batches of in-context data samples and perform competitively with, and in some cases even outperform, the CGD (and NAG) algorithm that is individually optimized for and run separately on each data sample in the test batch.}
+
+    This finding is particularly \textbf{surprising and significant} because CGD tailors its optimization individually for each data sample, whereas the Memformer applies a general optimization strategy learned from the training data across all samples. The ability of Memformers to generalize optimization strategies across data samples using shared parameters highlights their generalization capabilities, which have not been fully recognized in prior research.
+
+    \item \textbf{Enhanced performance through multi-headed attention with theoretical insights.} We show empirically that multi-headed attention improves Memformers' test performance and offer a heuristic explanation for why increasing attention heads enhances loss performance on test data.
+\end{enumerate}
+
+\textbf{\textit{Our main objective in this paper is to investigate the potential of memory-augmented Transformers to learn advanced optimization algorithms in a general sense. We are not advocating for Transformers as replacements for established optimization methods in practical applications.}} Instead, we aim to shed light on the algorithmic capabilities of Transformers, inspiring further exploration into how these architectures can learn and generalize complex algorithms. We believe our results contribute to a deeper understanding of how augmented Transformers can facilitate optimization, which may ultimately lead to the discovery of new and practical gradient-based algorithms.
+\subsection{Related Work}
+
+Research on Transformers is extremely active, and we cannot hope to fully capture the breadth of the related literature. Below, we summarize the most immediately relevant topics.
+
+\textbf{In-Context Learning.} 
+The ability of Transformer models to perform in-context learning (ICL) has been extensively studied since its introduction by \citet{brown2020language}. Subsequent works have explored how these models adapt to new tasks without requiring parameter updates \citep{xie2021explanation, von2023uncovering, hahn2023theory, liu2021makes, lu2021fantastically, wei2022chain, wu2022self}. This foundational research has paved the way for studies investigating how Transformers can implement specific algorithms, such as gradient-based methods.
+
+\noindent\textbf{Gradient-Based Methods in Transformers.} 
+\citet{garg2022can} analyze the learning of gradient descent within Transformers, particularly in the context of ICL for linear functions. Empirical studies \citep{garg2022can, akyurek2022learning, von2023transformers} have shown that Transformers can learn gradient descent after being trained on random linear regression tasks. Expanding on these results, \citet{von2023transformers, ahn2024transformers} demonstrate that Transformers can implement preconditioned gradient descent for solving linear regression problems presented in input prompts. Notably, these works—as well as ours—utilize Linear Transformers as discussed in~\citep{schlag2021linear, von2023transformers, ahn2023linear}.
+
+\noindent\textbf{Higher-Order Optimization Methods in Transformers.} 
+Transformers have also been shown to learn higher-order optimization techniques, such as Newton's method, expanding their capabilities beyond first-order methods~\citep{fu2023transformers, giannou2024well, vladymyrov2024linear}.
+
+\noindent\textbf{Memory-Augmented Transformers (Memformers).} 
+Memformers were introduced by \citet{wu2020Memformer, xu2021transformer}. These models retain intermediate attention values across layers through memory registers, enabling more complex computations and optimization methods to be learned. While significant progress has been made in understanding how Transformers can learn gradient descent, their potential for learning more sophisticated LFOMs remains largely unexplored. Our work addresses this gap by showing how Memformers can efficiently implement a wide range of advanced first-order and quasi-second-order optimization techniques, including CGD and momentum methods, thereby pushing the boundaries of Transformer-based architectures.
+
+\section{Background and Problem Setup}
+\label{Section:LinearTransformerArchitecture}
+\vspace{-6pt}
+\subsection{Linear Transformers on Random Linear Regression}
+We follow the setup of training Transformers on random instances of linear regression, following the prior works \citep{garg2022can, akyurek2022learning, von2023transformers, ahn2024transformers}. We largely use the notation and formal setup of~\citep{ahn2024transformers}, which we now proceed to recall.
+
+\textbf{Data Distribution.} Let \(\mathbf{x}(i) \in \mathbb{R}^d\) represent covariates drawn independently from a distribution \(\mathcal{D}_{\mathbf{X}}\), and let \(\mathbf{w}^* \in \mathbb{R}^d\) be drawn from \(\mathcal{D}_{\mathbf{W}}\). The matrix of covariates \(\mathbf{X} \in \mathbb{R}^{(n + 1) \times d}\) contains rows \(\mathbf{x}(i)\). The responses are \(\mathbf{y} = [\langle \mathbf{x}(1), \mathbf{w}^* \rangle, \dots, \langle \mathbf{x}(n), \mathbf{w}^* \rangle] \in \mathbb{R}^n\). Define the input matrix \(\mathbf{Z}_0\) as:
+\begin{equation}
+\mathbf{Z}_0 = 
+\begin{bmatrix}
+\mathbf{x}(1) & \mathbf{x}(2) & \cdots & \mathbf{x}(n) & \mathbf{x}(n+1) \\
+\mathbf{y}(1) & \mathbf{y}(2) & \cdots & \mathbf{y}(n) & 0
+\end{bmatrix} \in \mathbb{R}^{(d+1) \times (n+1)},
+\end{equation}
+where the zero corresponds to the unknown response for \(\mathbf{x}(n+1)\). The task is to predict \((\mathbf{w}^*)^{\top} \mathbf{x}(n+1)\) using \(\mathbf{Z}_0\). The training data consists of pairs \((\mathbf{Z}_0, (\mathbf{w}^*)^\top \mathbf{x}(n+1))\) for \(\mathbf{x}(i) \sim \mathcal{D}_{\mathbf{X}}\) and \(\mathbf{w}^* \sim \mathcal{D}_{\mathbf{W}}\).
+
+\textbf{Self-Attention Without Softmax.} We focus on the linear self-attention layer, building on \citep{schlag2021linear, von2023transformers}. Let \(\mathbf{Z} \in \mathbb{R}^{(d+1) \times (n+1)}\) be the input matrix of \(n+1\) tokens in \(\mathbb{R}^{d+1}\). Standard self-attention layer is defined as
+\begin{equation}
+\text{Attn}_{\text{smax}}(\mathbf{Z}) := W_v \mathbf{Z} M \cdot \text{smax}(\mathbf{Z}^{\top} W_k^{\top} W_q \mathbf{Z}),
+\end{equation}
+where \(W_v, W_k, W_q \in \mathbb{R}^{(d+1) \times (d+1)}\) are weight matrices, and \(\text{smax}(\cdot)\) denotes the column-wise softmax. The masking matrix \(M\) ensures that the label for \(\mathbf{x}(n+1)\) is excluded is given by
+\begin{equation}
+M = 
+\begin{bmatrix}
+\mathbf{I}_n & 0 \\
+0 & 0
+\end{bmatrix} \in \mathbb{R}^{(n+1) \times (n+1)}.
+\end{equation}
+Omitting softmax, the attention mechanism becomes
+\begin{equation}
+\label{eq:attention}
+\text{Attn}_{P, Q} (\mathbf{Z}) := P \mathbf{Z} M (\mathbf{Z}^{\top} Q \mathbf{Z}),
+\end{equation}
+where \(P = W_v\) and \(Q = W_k^{\top} W_q\). This simplified form, as shown in \cite{ahn2024transformers}, can implement preconditioned gradient descent, and it is the one we also use.
+
+\textbf{Transformer Architecture.} As in the related work, we also simplify the Transformer to consider only attention layers, using \(L\) layers of linear self-attention with a residual connection. Therefore, for each layer \(\ell\), the output is updated as
+\begin{equation}
+\mathbf{Z}_{\ell+1} = \mathbf{Z}_\ell + \frac{1}{n} \text{Attn}_{P_\ell, Q_\ell} (\mathbf{Z}_\ell), \quad \ell = 0, 1, \dots, L-1.
+\label{Z-update}
+\end{equation}
+Using updates~\eqref{Z-update}, with the input $\mathbf{Z}_0$, the final transformer output is
+\begin{equation}
+\text{TF}_L(\mathbf{Z}_0; \{P_\ell, Q_\ell\}_{\ell=0}^{L-1}) = -[\mathbf{Z}_L]_{(d+1), (n+1)}.
+\end{equation}
+The set of parameters $\{P_\ell, Q_\ell\}_{\ell=0}^{L-1}$ is then learned by minimizing the following training objective:
+\begin{equation}
+f\left(\{P_\ell, Q_\ell\}_{\ell=0}^{L-1}\right) = \mathbb{E}_{(\mathbf{Z}_0, \mathbf{w}^*)} \left[\left( \text{TF}_L(\mathbf{Z}_0) + (\mathbf{w}^{*})^{\top} \mathbf{x}(n+1) \right)^2 \right].
+\label{in-context_f}
+\end{equation}
+Here, the scaling factor \(\frac{1}{n}\) is used only for ease of notation and does not influence the expressive power of the Transformer.
+
+We will utilize the following lemma from \cite{ahn2024transformers}, which demonstrates that multi-layer Transformers simulate preconditioned gradient descent under suitable parameterization. We have provided the full proof of this Lemma \ref{Lemma 1} in the Appendix for completeness.
+\begin{equation}
+P_\ell = 
+\begin{bmatrix}
+\mathbf B_\ell = 0_{d \times d} & 0 \\
+0 & 1
+\end{bmatrix},
+\quad
+Q_\ell = 
+-\begin{bmatrix}
+\mathbf{A}_\ell & 0 \\
+0 & 0
+\end{bmatrix}, \quad \mathbf{A}_\ell, \mathbf{B}_\ell \in \mathbb{R}^{d \times d}.
+\label{params_Thm3}
+\end{equation}
+\begin{lemma}[Lemma 1, \cite{ahn2024transformers}]
+    Consider an \(L\)-layer linear transformer parameterized by \(\mathbf{A}_0, \dots, \mathbf{A}_{L-1}\), as in \eqref{params_Thm3}. Let \(y_\ell^{(n+1)}\) be the \((d+1, n+1)\)-th entry of the \(\ell\)-th layer output, i.e., \(y_\ell^{(n+1)} = [\mathbf{Z}_\ell]_{(d+1),(n+1)}\) for \(\ell = 1, \dots, L\).
+    \begin{equation}
+    y_\ell^{(n+1)} = -\langle \mathbf{x}^{(n+1)}, \mathbf{w}_{\ell}^{\mathrm{gd}} \rangle,
+    \end{equation}
+    where the sequence \(\{\mathbf{w}_{\ell}^{\mathrm{gd}}\}\) is defined as \(\mathbf{w}_{0}^{\mathrm{gd}} = 0\) and for \(\ell = 1, \dots, L-1\):
+    \begin{equation}
+    \mathbf{w}_{\ell+1}^{\mathrm{gd}} = \mathbf{w}_{\ell}^{\mathrm{gd}} - \mathbf{A}_\ell \nabla R_{\mathbf{w}^*}(\mathbf{w}_{\ell}^{\mathrm{gd}}),
+    \end{equation}
+    with the empirical least-squares loss (with \(\mathbf{X} := [\mathbf x^{(1)}, \ldots, \mathbf x^{(n)}] \in \mathbb R^{d \times n}\)):
+    \begin{equation}
+    R_{\mathbf{w}^*}(\mathbf{w}) := \frac{1}{2n} \|\mathbf{X}^\top \mathbf{w} - \mathbf{X}^\top \mathbf{w}^*\|^2 = \frac{1}{2n} (\mathbf{w} - \mathbf{w}^*)^\top \mathbf{X} \mathbf{X}^\top (\mathbf{w} - \mathbf{w}^*).
+    \label{in-context-loss}
+    \end{equation}
+\label{Lemma 1}
+\end{lemma}
+\subsection{Linear First-Order Methods}
+Linear First-Order Methods (LFOMs) \citep{goh2017why} are a class of optimization algorithms that lineary combine past gradients for minimizing smooth objective functions. They iteratively update a parameter vector \(\mathbf{w}\) using the gradient of the objective function. The general update rule is
+\begin{equation}
+\label{eq:2}
+\mathbf{w}^{k+1} = \mathbf{w}^k + \alpha_k \mathbf{d}^k,
+\end{equation}
+where \(\alpha_k\) is the step size and \(\mathbf{d}^k\) is the update direction, typically related to the gradient \(\nabla f(\mathbf{w}^k)\). Algorithms within this family differ in how they compute \(\mathbf{d}^k\) and choose \(\alpha_k\).
+
+LFOMs can be expressed in a cumulative form. For gradient descent, unrolling~\eqref{eq:2} we get
+\begin{equation}
+\mathbf{w}^{k+1} = \mathbf{w}^0 - \alpha \sum\nolimits_{i=0}^{k} \nabla f(\mathbf{w}^i),
+\end{equation}
+while common momentum methods need an additional term incorporating past gradients, yielding
+\begin{equation}
+\mathbf{w}^{k+1} = \mathbf{w}^0 + \sum\nolimits_{i=0}^{k} \gamma_i^k \nabla f(\mathbf{w}^i),
+\end{equation}
+where the coefficients \(\gamma_i^k\) weight previous gradients. More advanced methods, or general LFOMs, use diagonal matrices \(\Gamma_i^k\) to coordinate-wise scale each gradient component, i.e.,
+\begin{equation}
+\mathbf{w}^{k+1} = \mathbf{w}^0 + \sum\nolimits_{i=0}^{k} \Gamma_i^k \nabla f(\mathbf{w}^i).
+\end{equation}
+%\sra{Since CGD is recalled, we can also briefly recall the updates for momentum methods; perhaps best would be to typeset both as pseudocode side-by-side.}
+\paragraph{Momentum Methods and Conjugate Gradient Descent (CGD)}
+Momentum methods accelerate convergence by incorporating a momentum term, modifying the gradient to account for past updates and achieving faster convergence in relevant directions. Conjugate Gradient Descent (CGD), on the other hand, is a first-order method optimized for quadratic minimization, serving as a benchmark for large-scale, sparse linear systems. After an initial steepest descent, CGD generates directions conjugate to previous ones, leading to faster convergence than standard gradient descent. Both are core methods within the LFOM class, summarized below:
+
+\vspace{0.5em}
+
+\noindent
+\begin{minipage}[t]{0.45\textwidth}
+    \textbf{Momentum Methods}\\
+    \begin{algorithmic}[1]
+        \State Initialize $\mathbf{w}_0$, $\mathbf{v}_0 = 0$
+        \For{$n = 1, 2, \dots$}
+            \State Compute the gradient:
+            \[
+            \nabla f(\mathbf{w}_n)
+            \]
+            \State Update the velocity:
+            \[
+            \mathbf{v}_n = \beta \mathbf{v}_{n-1} - \eta \nabla f(\mathbf{w}_n)
+            \]
+            \State Update the iterate:
+            \[
+            \mathbf{w}_{n+1} = \mathbf{w}_n + \mathbf{v}_n
+            \]
+        \EndFor
+        \State \(\beta\): Momentum coefficient (controls the influence of past gradients)
+        \State \(\eta\): Learning rate (scales the gradient step size)
+    \end{algorithmic}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.45\textwidth}
+    \textbf{Conjugate Gradient Descent (CGD)}\\
+    \begin{algorithmic}[1]
+        \State Initialize $\mathbf{w}_0$, $\mathbf{s}_0 = -\nabla f(\mathbf{w}_0)$
+        \For{$n = 1, 2, \dots$}
+            \State Compute the steepest descent direction:
+            \[
+            \Delta \mathbf{w}_n = -\nabla f(\mathbf{w}_n)
+            \]
+            \State Compute the conjugacy coefficient:
+            \[
+            \gamma_n = \frac{\|\nabla f(\mathbf{w}_n)\|^2}{\|\nabla f(\mathbf{w}_{n-1})\|^2}
+            \]
+            \State Update the search direction:
+            \[
+            \mathbf{s}_n = \Delta \mathbf{w}_n + \gamma_n \mathbf{s}_{n-1}
+            \]
+            \State Perform a line search:
+            \[
+            \alpha_n = \arg \min_\alpha f(\mathbf{w}_n + \alpha \mathbf{s}_n)
+            \]
+            \State Update the iterate:
+            \[
+            \mathbf{w}_{n+1} = \mathbf{w}_n + \alpha_n \mathbf{s}_n
+            \]
+        \EndFor
+    \end{algorithmic}
+\end{minipage}
+
+\vspace{0.5em}
+
+Momentum methods provide fast convergence by accumulating gradient history and are widely used in modern optimization. CGD converges in at most \(N\) iterations for quadratic functions, where \(N\) is the number of variables, and is effective for ill-conditioned problems.
+
+\section{Memformers Can Implement LFOMs In-Context}
+
+Memformers can ``learn" LFOMs in the specific sense discussed earlier in Section \ref{Sect:Introduction}. Each layer \(\ell\) of the Memformer has learnable parameters such as \( \mathbf{A}_{\ell}, \mathbf{B}_{\ell} \) \eqref{params_Thm3}, and \(\alpha_{\ell}, \gamma_{\ell}\) \eqref{eq:dynamic-mem} or \(\Gamma_{\ell}\) \eqref{LFOM_memory}.
+
+Theoretically, in Propositions~\ref{Proposition 1} and~\ref{Proposition 2} below, we show that in their forward pass, under certain parameter configurations, Memformers can implement exact CGD and LFOM iterations. This is indicative of the algorithmic capacities of these architectures. \textbf{In experiments, using a small number of learned parameters that are shared across a batch of in-context test data samples, the Memformer can then perform ``CGD-like" (\ref{Sec:dynamic-mem}) or ``LFOM-like" (\ref{Sec:LFOM-mem}) iterations that are competitive with, and in some cases even outperform, CGD.}
+
+As noted in \cite[Subsection C.1]{ahn2024transformers}, the term \( \mathrm{Attn}_{P_\ell, Q_\ell}(\mathbf{Z}_\ell) \) in the update for \( \mathbf{Z}_{\ell+1} \) \eqref{Z-update} corresponds to the preconditioned gradient \( \mathbf{A}_\ell \nabla R_{\mathbf{w}^*}(\mathbf{w}_{\ell}^\mathrm{gd}) \) of the in-context loss \eqref{in-context-loss} in the update for \(\mathbf{w}_{\ell + 1}^\mathrm{gd}\).
+
+We will henceforth call the class of algorithms that the following architecture \eqref{eq:dynamic-mem} can implement as \textbf{``CGD-like"}, and the class of algorithms that architecture \eqref{LFOM_memory} can implement as \textbf{``LFOM-like"}.
+
+\subsection{Dynamic Memory for CGD-like Algorithms}
+\label{Sec:dynamic-mem}
+
+\begin{proposition}\label{Proposition 1}
+A memory-augmented Transformer can implement Conjugate Gradient Descent (CGD) in its forward pass through a dynamic memory mechanism that recursively refines search directions, where the update rules are:
+\begin{align}
+    \mathbf{R}_\ell &= \mathrm{Attn}_{P_\ell, Q_\ell}(\mathbf{Z}_\ell) + \gamma_\ell \mathbf{R}_{\ell-1}, \label{eq:dynamic-mem_update} \\
+    \mathbf{Z}_{\ell+1} &= \mathbf{Z}_\ell + \alpha_\ell \frac{1}{n} \mathbf{R}_\ell, \label{eq:dynamic-mem}
+\end{align}
+where \( \gamma_\ell \) and \( \alpha_\ell \) control the influence of past updates and the step size, respectively.
+\end{proposition}
+
+\begin{proofsketch}
+Here \(\mathbf{R}_{\ell}\) denotes the state of a \textit{single} memory register \(\mathbf R\) at different layers \(\ell\) during a forward pass. CGD refines search directions using current gradients and previous directions. The Transformer simulates this by using \( \mathrm{Attn}_{P_\ell, Q_\ell}(\mathbf{Z}_\ell) \) as the current update, analogous to the gradient in CGD, and \( \gamma_\ell \mathbf{R}_{\ell-1} \) to refine the previous search direction, corresponding to the recursive update of \( \mathbf{s}_n \) in CGD.
+
+The recursive update for \( \mathbf{R}_\ell \) thus mimics \( \mathbf{s}_n \), the search direction in CGD. The update for \( \mathbf{Z}_{\ell+1} \) uses \( \mathbf{R}_\ell \), scaled by \( \alpha_\ell \), similar to how CGD iterates are updated using \( \mathbf{s}_n \). With \( \mathbf{A}_\ell = \mathbf{I} \), this process matches CGD applied to the loss \( R_{\mathbf{w}^*}(\mathbf{w}) \) \eqref{in-context-loss}, using both current and previous gradients to refine the search direction. (\textbf{A full proof of Proposition~\ref{Proposition 1} is provided in Appendix A.})
+\end{proofsketch}
+
+\subsection{Implementing \texorpdfstring{$k$}{k} Steps of LFOM with Memory Registers}
+\label{Sec:LFOM-mem}
+
+We extend our analysis to show how Transformers can simulate \( k \) steps of Linear First-Order Methods (LFOMs). This is achieved by maintaining a memory register at each layer, which stores accumulated updates from previous layers, simulating iterative optimization.
+
+\begin{proposition}\label{Proposition 2}
+A memory-augmented Transformer can implement \( k \) steps of LFOM in its forward pass by maintaining memory registers across layers, where the update rules are:
+\begin{align}
+    \mathbf{R}_\ell &= \mathrm{Attn}_{P_\ell, Q_\ell}(\mathbf{Z}_\ell), \\
+    \mathbf{Z}_{\ell+1} &= \mathbf{Z}_\ell + \frac{1}{n} \sum_{j=0}^{\ell} \Gamma_j^\ell \odot \mathbf{R}_j, \label{LFOM_memory}
+\end{align}
+where \( \Gamma_j^\ell \) governs the contribution of previous layers, and \( \odot \) is the Hadamard product for scaling.
+\end{proposition}
+
+\begin{proofsketch}
+Here each \( \mathbf{R}_\ell\) denotes a \textit{separate} memory register for each layer \(\ell\). Memformers with this architecture simulate iterative optimization by refreshing the memory register \( \mathbf{R}_\ell \) at each layer with \( \mathrm{Attn}_{P_\ell, Q_\ell}(\mathbf{Z}_\ell) \), capturing the current update. The cumulative update to \( \mathbf{Z}_{\ell+1} \) incorporates past layers through a weighted sum of previous memory registers \( \mathbf{R}_j \), with weights \( \Gamma_j^\ell \in \mathbb{R}^{(d + 1) \times (n + 1)} \), mimicking LFOM's cumulative iterative process. We will henceforth refer to this architecture \eqref{LFOM_memory} as ``\textbf{LFOM Memformer}".
+
+The Hadamard product \( \odot \) modulates the influence of \( \mathbf{R}_j \), analogous to gradient preconditioning. This setup subsumes the case of diagonal preconditioners \( \Lambda_i^k \) acting on gradients \( \nabla R_{\mathbf{w}^*}(\mathbf{w}_i^{\mathrm{gd}}) \), which in the general form looks like:
+\begin{equation}
+\mathbf{w}_{k+1}^{\mathrm{gd}} = \mathbf{w}_0 + \sum_{i=0}^k \Lambda_i^k \nabla R_{\mathbf{w}^*}(\mathbf{w}_i^{\mathrm{gd}}).
+\end{equation}
+The matrices \( \Gamma_j^\ell \in \mathbb{R}^{(d + 1) \times (n + 1)} \) and \( \Lambda_i^k \in \mathbb{R}^{d \times d} \) serve similar roles, but their dimensions differ. We expect this Hadamard product memory architecture to be able to perform richer algorithms than LFOMs, though a formal characterization of its full potential remains to be done.
+
+The full proof follows from the cumulative memory structure and the connection between attention and preconditioned gradients, as discussed in the proof steps of Lemma~\ref{Lemma 1}. (\textbf{A full proof of Proposition~\ref{Proposition 2} is provided in Appendix A.})
+\end{proofsketch}
+
+\textbf{Remark.} The update~\eqref{LFOM_memory} could be interpreted as a type of \emph{gated memory}, related to gating in LSTMs and GRUs that also use the Hadamard product to modulate information flow through gates. This similarity suggests that principles from these architectures could help refine memory mechanisms in Transformers, potentially enhancing their ability to handle long-term dependencies in optimization tasks. However, further exploration is needed to fully understand this relationship.
+
+\subsection{Experimental Results: Memformer Performance vs. CGD}
+\label{Section:Experimental_Results}
+In this section, we present our empirical results for Memformers ``learning" conjugate gradient descent (CGD), general linear first-order methods (LFOMs), and general LFOMs with \( \mathrm{GD}^{++} \). The method \( \mathrm{GD}^{++} \) is a quasi-Newton method where the inverse Hessian in Newton's method is approximated by a truncated Neumann series; for more details on \( \mathrm{GD}^{++} \), refer to Section A.10 of \cite{von2023transformers}.
+
+We consider the in-context loss function \eqref{in-context-loss} for linear regression. The input dimension is set to \( d = 5 \), and the number of training observations in the prompt is \( n = 20 \). Both the inputs \( \mathbf{x}^{(i)} \) and the target weight vector \( \mathbf{w}^* \) are sampled from Gaussian distributions: \( \mathbf{x}^{(i)} \sim \mathcal{N}(0, \mathbf{\Sigma}) \) and \( \mathbf{w}^* \sim \mathcal{N}(0, \mathbf{\Sigma}^{-1}) \), where \( \mathbf{\Sigma} = \mathbf{U}^\top \mathbf{D} \mathbf{U} \). Here, \( \mathbf{U} \) is a uniformly random orthogonal matrix, and \( \mathbf{D} \) is a fixed diagonal matrix with entries \( \operatorname{diag}(1, 1, 1/2, 1/4, 1) \).
+
+We optimize the function \( f \) \eqref{in-context_f} for a three-layer linear transformer using the ADAM optimizer. The matrices \( \mathbf{A}_0 \), \( \mathbf{A}_1 \), and \( \mathbf{A}_2 \) (as in \eqref{params_Thm3}) are initialized with independent and identically distributed (i.i.d.) Gaussian entries. Each gradient step is computed using a batch of size 1000, and we resample the batch every 100 steps. We clip the gradient of each matrix to have a maximum norm of 0.01. All plots are averaged over five runs, each with a different randomly sampled \( \mathbf{U} \) (and thus different \( \mathbf{\Sigma} \)).
+
+Figure~\ref{fig:cg_preconditioning} illustrates the implementation of a CGD-like algorithm under the architecture given by \eqref{eq:dynamic-mem}. In Figure~\ref{fig:cg_without_preconditioning}, the line-search parameters \( \alpha_\ell \) and deflection parameters \( \gamma_\ell \) for each layer \( \ell \) are obtained by training using ADAM. By “CGD-like,” we mean that upon training the Memformer using ADAM, the Memformer layers learn general parameters \( \alpha_\ell \) and \( \gamma_\ell \) which, while they may not match the exact CGD parameters for individual observations, perform well enough on each observation to be comparable to, if not competitive with, CGD. We further explain the important issue of learning general parameters in Section~\ref{Section:Generalized_Performance}.
+
+Figure~\ref{fig:cg_with_preconditioning} presents the same experiment as Figure~\ref{fig:cg_without_preconditioning}, using the architecture in \eqref{eq:dynamic-mem}, but with the parameters \( \mathbf{A}_\ell \) for each layer not restricted to scalars. Thus, past gradients are accounted for, similar to CGD, but with preconditioners \( \mathbf{A}_\ell \). This is therefore not a “CGD-like” algorithm. We aim to demonstrate that once we allow preconditioned gradients, a Memformer implements a certain ``LFOM-like" algorithm that distinctly outperforms CGD.
+
+Figure~\ref{fig:lfom_isotropic_vs_nonisotropic} presents the performance of LFOM Memformer under the architecture in \eqref{LFOM_memory}, where the matrix parameters \( \Gamma_j \) for each layer \( j \) are obtained by training using ADAM. In our experiments, we consider the special case of \( \Gamma_j^\ell = \Gamma_j \ \forall \ell\), which is more natural, if we consider that each layer \(j\) of the Memformer has an associated \(\Gamma_j\). Figure~\ref{fig:lfom_nonisotropic} shows the results on non-isotropic data, and Figure~\ref{fig:lfom_isotropic} shows the results on isotropic data. Note that this algorithm is quite similar in nature to the previous case in Figure~\ref{fig:cg_with_preconditioning}. Here, the \( \Gamma_j \)'s essentially act as preconditioners of the gradients computed in each layer. Consequently, the graphs of Figures~\ref{fig:cg_with_preconditioning} and \ref{fig:lfom_nonisotropic} are nearly identical. In the isotropic data experiment (Figure~\ref{fig:lfom_isotropic}), we observe that the Memformer does not perform better than a linear transformer. In quadratics with isotropic data, there is no significant variation in curvature across directions; thus, incorporating past gradients via momentum offers little advantage. Momentum is more beneficial in cases with non-isotropic data.
+
+Figure~\ref{fig:lfom_gdpp_isotropic_vs_nonisotropic} presents LFOM Memformer with \( \mathrm{GD}^{++} \) under the architecture in \eqref{LFOM_memory}, where the \( \mathbf{B}_\ell \) blocks in the \( P_\ell \) matrices for each layer \( \ell \) \eqref{params_Thm3} are allowed to be non-zero. Once again, the matrix parameters for each layer \( \ell \) are obtained by training using ADAM. In this case, the \( \mathbf{B}_\ell \) matrices resemble a heavily truncated Neumann series of the inverse \( \mathbf{X} \mathbf{X}^\top \) (Hessian of \eqref{in-context-loss}), resulting in a quasi-Newton method. The experiments are conducted on both non-isotropic data (Figure~\ref{fig:lfom_gdpp_nonisotropic}) and isotropic data (Figure~\ref{fig:lfom_gdpp_isotropic}).
+
+\begin{figure}[!htbp]
+  \centering
+  \begin{subfigure}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{cg_without_preconditioning.png}
+    \caption{Without Preconditioning}
+    \label{fig:cg_without_preconditioning}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{cg_with_preconditioning.png}
+    \caption{With Preconditioning}
+    \label{fig:cg_with_preconditioning}
+  \end{subfigure}
+  \caption{Comparison of Linear Transformer and CGD Memformer \eqref{eq:dynamic-mem} with general CGD-like parameters to actual CGD running separately on each test observation.}
+  \label{fig:cg_preconditioning}
+\end{figure}
+\vspace{-5pt}
+
+\begin{figure}[!htbp]
+  \centering
+  \begin{subfigure}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{lfom_nonisotropic.png}
+    \caption{Non-Isotropic Data}
+    \label{fig:lfom_nonisotropic}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{lfom_isotropic.png}
+    \caption{Isotropic Data}
+    \label{fig:lfom_isotropic}
+  \end{subfigure}
+  \caption{LFOM Memformer \eqref{LFOM_memory} performance on non-isotropic vs. isotropic test data (Pre = with non-trivial preconditioners). Test data is independently sampled from the same distribution as the training data.}
+  \label{fig:lfom_isotropic_vs_nonisotropic}
+\end{figure}
+\vspace{-5pt}
+
+\begin{figure}[!htbp]
+  \centering
+  \begin{subfigure}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{lfom_gdpp_nonisotropic.png}
+    \caption{Non-Isotropic Data}
+    \label{fig:lfom_gdpp_nonisotropic}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{lfom_gdpp_isotropic.png}
+    \caption{Isotropic Data}
+    \label{fig:lfom_gdpp_isotropic}
+  \end{subfigure}
+  \caption{LFOM Memformer \eqref{LFOM_memory} GD++ performance on non-isotropic vs. isotropic test data (Pre = with non-trivial preconditioners). Test data is independently sampled from the same distribution as the training data.}
+  \label{fig:lfom_gdpp_isotropic_vs_nonisotropic}
+\end{figure}
+
+\section{Experiments: Influence of Batch Size on Performance}
+\label{Section:Generalized_Performance}
+We emphasize here that the results presented in Section~\ref{Section:Experimental_Results} compare the performance of Transformers and Memformers (which learn shared generic parameters upon training) against CGD that runs on fresh observations of batch size \( B = 1000 \), independently resampled from the same distribution. But unlike CGD that computes specific parameters for each observation, the Transformer and Memformer models learn shared parameters \( P_\ell \), \( Q_\ell \) (and \( \alpha_\ell \), \( \gamma_\ell \), or \( \Gamma_\ell \)) for each layer \( \ell \), and these parameters are applied uniformly across all 1000 observations in the batch. In contrast, CGD is executed individually on each of the 1000 observations in the batch, and the average log-loss versus layers is plotted.
+
+The strength of LFOM Memformers \eqref{LFOM_memory} (with matrices \( \Gamma_\ell \) restricted to scalar multiples of the identity) becomes even more pronounced when tested on training data with small batch sizes, such as \( B = 1 \) and \( B = 10 \). In these scenarios, the Memformers learn parameters that significantly outperform CGD running in parallel on each of the observations in those small batches. Figure~\ref{fig:small-batches-experiment} demonstrates this comparison. We further provide an experimental comparison of LFOM Memformer performance vs. Nesterov Accelerated Gradient Method and Momentum GD in the Appendix.
+
+\begin{figure}
+  \centering
+  \begin{subfigure}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{Batch_Size_1.png}
+    \caption{Batch Size \( B = 1 \)}
+    \label{fig:batch_size_1}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{Batch_Size_10.png}
+    \caption{Batch Size \( B = 10 \)}
+    \label{fig:batch_size_10}
+  \end{subfigure}
+  \caption{LFOM Memformer \eqref{LFOM_memory} with scalar preconditioners \(\Gamma_\ell\) vs. CGD performance on small batch training data (\( B = 1 \) and \( B = 10 \)). The Memformer demonstrates superior performance on the training data.}
+  \label{fig:small-batches-experiment}
+\end{figure}
+
+\section{Experiments: Impact of Using Multi-Headed Attention}
+\label{Section:Multi-Headed_Attention}
+Our experiments show that increasing the number of attention heads improves test loss performance. Multi-head attention enables Transformers to learn diverse preconditioning matrices, better adapting to varying data covariance structures. In our architecture~\eqref{eq:dynamic-mem_update}, attention values from each head are summed into the memory register \( \mathbf{R}_\ell \) at each layer. Heuristically, each head captures different aspects of the data, estimating gradients from multiple perspectives. This ensemble-like behavior reduces variance in gradient updates by averaging out individual noise and biases, leading to faster convergence and more stable optimization. Acting as implicit regularization, it prevents overfitting and enhances generalization on test data. This phenomenon is also supported by recent studies. \citet{chen2024transformers} showed that multi-head attention is essential for effective context preprocessing in sparse linear regression, aligning with our findings. Similarly, \citet{cui2024superiority} provided theoretical and empirical evidence that multi-head attention outperforms single-head attention in in-context learning.
+
+Figure~\ref{fig:attention_experiments} compares models with 1-head and 5-head attention, illustrating the benefits of multiple heads on convergence speed and test loss performance.
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{1head_attention_experiment.png}
+    \caption{1-Head Attention Performance}
+    \label{fig:1head_attention}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.45\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{5head_attention_experiment.png}
+    \caption{5-Head Attention Performance}
+    \label{fig:5head_attention}
+  \end{subfigure}
+  \caption{Comparison of LFOM Memformer \eqref{LFOM_memory} (with scalar preconditioners \(\Gamma_\ell\)) performance using 1-head and 5-head attention, relative to CGD.}
+  \label{fig:attention_experiments}
+\end{figure}
+
+\section{Discussion and Future Work}
+This work demonstrates the capability of memory-augmented Transformers (Memformers) to implement a broad range of first-order optimization methods, opening several research directions. We briefly comment on some of these aspects below.
+
+\begin{enumerate}[label=(\roman*),leftmargin=*]
+\setlength{\itemsep}{0pt}
+\item \textbf{Architectural Flexibility}: Small modifications, such as (gated) memory registers, significantly enhance Transformers' ability to learn and implement diverse optimization algorithms. Future research could explore further architectural innovations to unlock even greater capabilities.
+    
+\item \textbf{General Function Classes}: While our approach successfully makes Transformers implement LFOMs on quadratic functions, future work should extend this to more general objective functions. Doing so may require novel training strategies, and possibly architectural adjustments to handle non-quadratic functions. The role of nonlinear attention and the MLP component of Transformers may also prove to be useful here.
+    
+\item \textbf{Efficiency vs.~Generalization}: Attention-based methods require more computation than directly implementing conjugate gradient descent or momentum GD. However, Transformers excel in learning general parameters, enabling LFOMs to generalize across new data without needing per-instance optimization. Exploring practical use of such ``learned optimizers'' to either warmstart a solver, or to potentially even bypass it, is a tantalizing research topic.
+    
+%\item \textbf{Beyond LFOMs and Newton’s Method}: Future work should explore whether Transformers can efficiently learn more advanced optimization methods or even discover new techniques that are tailored to Transformer architectures.
+    
+\item \textbf{Theoretical Foundations and Convergence Analysis}: Strengthening the theoretical basis of Transformers’ optimization capabilities, including convergence analysis and their alignment with classical optimization theory, is another important direction for future research.
+    
+\item \textbf{Meta-learning and Transfer Learning}: The ability of Transformers to learn and generalize optimization algorithms offers exciting potential for meta-learning and transfer learning, providing new opportunities in areas where traditional optimization methods fall short.
+\end{enumerate}
+
+\subsection{Limitations}
+We briefly remark on some limitations of our current framework. %   \item \textbf{Performance of LFOMs Compared to Preconditioned Gradient Descent (GD)}: 
+For instance, while Memformers are quite versatile, our experiments (Figures \ref{fig:cg_preconditioning}, \ref{fig:lfom_isotropic_vs_nonisotropic}) indicate they do not radically outperform preconditioned GD on general quadratic problems as in \eqref{in-context-loss}, where the preconditioner matrix \(\Gamma_\ell\) (and likewise, \(\mathbf A_\ell\)) for the current layer \(\ell\) is the main contributor to loss performance at each update step \(\ell\) \eqref{eq:dynamic-mem_update}. On the other hand, this behavior is likely due to the task being quadratic, and a future study that tackles more general ICL formulations will likely shed light here.
+
+Transformers can implement second-order methods like Newton's method \citep{fu2023transformers, giannou2024well}, which typically outperform LFOMs in convergence speed and accuracy. However, we reiterate that the main focus of our paper is to explore the space of first-order optimization algorithms that augmented Transformers can learn, as opposed to looking for ``the best'' algorithm.
+
+
+\section{Reproducibility Statement}
+
+We believe the following points provide a clear path for replicating our results:
+
+\begin{itemize}
+    \item \textbf{Code Availability}: The code for our experiments, including Memformers and LFOM implementations, is available at \url{https://anonymous.4open.science/r/ICLR-2025-Memformer_LFOM}.
+    
+    \item \textbf{Experiment Setup}: Detailed descriptions of the training setup, model architecture, parameter initialization, and optimization methods are included in Sections \ref{Section:LinearTransformerArchitecture} and \ref{Section:Experimental_Results}.
+    
+    \item \textbf{Random Seeds}: Random seeds were fixed across all experiments to ensure consistency, and they are provided in the code repository for replication.
+    
+    \item \textbf{Hardware Requirements}: All experiments were conducted on NVIDIA T4 GPUs in Google Colab.
+\end{itemize}
+
+\bibliographystyle{plainnat}
+\setlength{\bibsep}{3pt}
+\bibliography{custom}
+
+\newpage
+\section*{Supplementary Material}
+\addcontentsline{toc}{section}{Supplementary Material}
+\appendix
+
+\section{Proofs}
+\subsection{Proof of Lemma 1: Equivalence to Preconditioned Gradient Descent}
+\label{Proof of Lemma 1}
+
+This proof already exists in the literature, for instance, in Subsection C.1 of \cite{ahn2024transformers}. However, we repeat it here, to make this paper as self-contained as possible.
+
+Consider a set of fixed samples \( \mathbf{x}^{(1)}, \dots, \mathbf{x}^{(n)} \), along with a fixed vector \( \mathbf{w}^* \). Let \( P = \{P_i\}_{i=0}^{k} \) and \( Q = \{Q_i\}_{i=0}^{k} \) represent fixed weights, and let \( \mathbf{Z}_i \) evolve as per equation \eqref{Z-update}. Define \( \mathbf{X}_i \) as the first \( d \) rows of \( \mathbf{Z}_k \) (under equation \eqref{params_Thm3}, we have \( \mathbf{X}_i = \mathbf{X}_0 \) for all \( i \)), and let \( \mathbf{Y}_i \) be the \( (d+1) \)-th row of \( \mathbf{Z}_i \). Now, let \( g(\mathbf{x}, \mathbf{y}, k) : \mathbb{R}^d \times \mathbb{R} \times \mathbb{Z} \to \mathbb{R} \) be a function such that for \( \mathbf{x}_{n+1} = \mathbf{x} \) and \( \mathbf{y}_{n+1}^{(0)} = \mathbf{y} \), the function is defined as \( g(\mathbf{x}, \mathbf{y}, k) := \mathbf{y}_{n+1}^{(k)} \). It’s worth noting that \( \mathbf{y}_{n+1}^{(k)} = [\mathbf{Y}_k]_{n+1} \).
+
+We can verify that, under equation \eqref{params_Thm3}, the update rule for \( \mathbf{y}_{n+1}^{(k)} \) is given by:
+\begin{equation}
+\mathbf{Y}_{k+1} = \mathbf{Y}_k - \frac{1}{n} \mathbf{Y}_k M \mathbf{X}_0^\top A_k \mathbf{X}_0,
+\label{Yk_update}
+\end{equation}
+where \( M \) is a mask matrix of the form:
+\[
+M = \begin{bmatrix} I & 0 \\ 0 & 0 \end{bmatrix}.
+\]
+
+The following points can be verified:
+
+1. \( g(\mathbf{x}, \mathbf{y}, k) = g(\mathbf{x}, 0, k) + \mathbf{y} \). To see this, note that for each \( i \in \{1, \dots, n\} \), we have:
+\[
+\mathbf{y}^{(i)}_{k+1} = \mathbf{y}^{(i)}_k - \frac{1}{n} \sum_{j=1}^{n} \mathbf{x}^{(i)\top} A_k \mathbf{x}^{(j)} \mathbf{y}^{(j)}_k.
+\]
+Thus, \( \mathbf{y}^{(i)}_k \) does not depend on \( \mathbf{y}_{n+1}^{(t)} \) for any \( t \). For \( \mathbf{y}_{n+1}^{(k)} \), the update becomes:
+\[
+\mathbf{y}_{n+1}^{(k+1)} = \mathbf{y}_{n+1}^{(k)} - \frac{1}{n} \sum_{j=1}^{n} \mathbf{x}_{n+1}^\top A_k \mathbf{x}^{(j)} \mathbf{y}^{(j)}_k,
+\]
+which clearly shows that the dependence on \( \mathbf{y}_{n+1}^{(k)} \) is additive. Through a simple induction, we can establish:
+\[
+g(\mathbf{x}, \mathbf{y}, k+1) - \mathbf{y} = g(\mathbf{x}, \mathbf{y}, k) - \mathbf{y}.
+\]
+
+2. The function \( g(\mathbf{x}, 0, k) \) is linear in \( \mathbf{x} \). To see this, note that for \( j \neq n+1 \), \( \mathbf{y}_j^{(k)} \) does not depend on \( \mathbf{x}_{n+1}^{(t)} \) for any \( t \), \( j \), or \( k \). Therefore, the update for \( \mathbf{y}_{n+1}^{(k+1)} \) depends linearly on \( \mathbf{x}_{n+1} \) and \( \mathbf{y}_{n+1}^{(k)} \). Since \( \mathbf{y}_{n+1}^{(0)} = 0 \) is linear in \( \mathbf{x} \), we conclude by induction that the result holds.
+
+Considering these points, we can confirm that for each \( k \), there exists a vector \( \mathbf{\theta}_k \in \mathbb{R}^d \) such that:
+\[
+g(\mathbf{x}, \mathbf{y}, k) = g(\mathbf{x}, 0, k) + \mathbf{y} = \langle \mathbf{\theta}_k, \mathbf{x} \rangle + \mathbf{y},
+\]
+for all \( \mathbf{x} \) and \( \mathbf{y} \). It follows that \( g(\mathbf{x}, \mathbf{y}, 0) = \mathbf{y} \), so that \( \langle \mathbf{\theta}_0, \mathbf{x} \rangle = g(\mathbf{x}, \mathbf{y}, 0) - \mathbf{y} = 0 \), implying \( \mathbf{\theta}_0 = 0 \).
+
+We now focus on the third key fact: for each \( i \), we have:
+\[
+g(\mathbf{x}^{(i)}, \mathbf{y}^{(i)}, k) = \mathbf{y}^{(i)}_k = \langle \mathbf{\theta}_k, \mathbf{x}^{(i)} \rangle + \mathbf{y}^{(i)}.
+\]
+To prove this, let \( \mathbf{x}_{n+1} := \mathbf{x}^{(i)} \) for some \( i \in \{1, \dots, n\} \). Then:
+\[
+\mathbf{y}^{(i)}_{k+1} = \mathbf{y}^{(i)}_k - \frac{1}{n} \sum_{j=1}^{n} \mathbf{x}^{(i)\top} A_k \mathbf{x}^{(j)} \mathbf{y}^{(j)}_k,
+\]
+\[
+\mathbf{y}_{n+1}^{(k+1)} = \mathbf{y}_{n+1}^{(k)} - \frac{1}{n} \sum_{j=1}^{n} \mathbf{x}_{n+1}^\top A_k \mathbf{x}^{(j)} \mathbf{y}^{(j)}_k,
+\]
+therefore, \( \mathbf{y}^{(i)}_{k+1} = \mathbf{y}_{n+1}^{(k+1)} \) when \( \mathbf{y}^{(i)}_k = \mathbf{y}_{n+1}^{(k)} \). This completes the induction, given that \( \mathbf{y}^{(i)}_0 = \mathbf{y}_{n+1}^{(0)} \) by definition.
+
+Let \( \mathbf{\bar{X}} \in \mathbb{R}^{d \times n} \) be the matrix whose columns are \( \mathbf{x}^{(1)}, \dots, \mathbf{x}^{(n)} \), excluding \( \mathbf{x}_{n+1} \), and let \( \mathbf{\bar{Y}}_k \in \mathbb{R}^{1 \times n} \) be the vector of \( \mathbf{y}^{(1)}_k, \dots, \mathbf{y}^{(n)}_k \). It follows that:
+\[
+\mathbf{\bar{Y}}_k = \mathbf{\bar{Y}}_0 + \mathbf{\theta}_k^\top \mathbf{\bar{X}}.
+\]
+
+Using this, the update formula for \( \mathbf{y}_{n+1}^{(k)} \) becomes:
+\begin{equation}
+\mathbf{y}_{n+1}^{(k+1)} = \mathbf{y}_{n+1}^{(k)} - \frac{1}{n} \langle A_k \mathbf{\bar{X}}^\top \mathbf{\bar{Y}}_k, \mathbf{x}_{n+1} \rangle,
+\label{yn_update}
+\end{equation}
+leading to the update:
+\begin{equation}
+\langle \mathbf{\theta}_{k+1}, \mathbf{x}_{n+1} \rangle = \langle \mathbf{\theta}_k, \mathbf{x}_{n+1} \rangle - \frac{1}{n} \langle A_k \mathbf{\bar{X}} (\mathbf{\bar{X}}^\top \mathbf{\theta}_k + \mathbf{\bar{Y}}_0), \mathbf{x}_{n+1} \rangle.
+\label{thetak_xn_update}
+\end{equation}
+
+Since \( \mathbf{x}_{n+1} \) is arbitrary, we derive the general update formula:
+\begin{equation}
+\mathbf{\theta}_{k+1} = \mathbf{\theta}_k - \frac{1}{n} A_k \mathbf{\bar{X}} \mathbf{\bar{X}}^\top (\mathbf{\theta}_k + \mathbf{w}^*).
+\label{thetak_update}
+\end{equation}
+
+Treating \( A_k \) as a preconditioner, and letting \( f(\mathbf{\theta}) := \frac{1}{2n} (\mathbf{\theta} + \mathbf{w}^*)^\top \mathbf{\bar{X}} \mathbf{\bar{X}}^\top (\mathbf{\theta} + \mathbf{w}^*) \), we can express the update as:
+\begin{equation}
+\mathbf{\theta}_{k+1} = \mathbf{\theta}_k - \frac{1}{n} A_k \nabla f(\mathbf{\theta}).
+\label{theta_k_preconditionedGD}
+\end{equation}
+
+Finally, let \( \mathbf{w}_k^{\text{gd}} := -\mathbf{\theta}_k \). We can verify that \( f(-\mathbf{w}) = R_{\mathbf{w}^*}(\mathbf{w}) \), implying that:
+\begin{equation}
+\mathbf{w}_{k+1}^{\text{gd}} = \mathbf{w}_k^{\text{gd}} - \frac{1}{n} A_k \nabla R_{\mathbf{w}^*}(\mathbf{w}_k^{\text{gd}}).
+\label{wk_update}
+\end{equation}
+
+We also confirm that for any \( \mathbf{x}_{n+1} \), the prediction of \( \mathbf{y}_{n+1}^{(k)} \) is:
+\[
+g(\mathbf{x}_{n+1}, \mathbf{y}_{n+1}, k) = \mathbf{y}_{n+1} - \langle \mathbf{\theta}, \mathbf{x}_{n+1} \rangle = \mathbf{y}_{n+1} + \langle \mathbf{w}_k^{\text{gd}}, \mathbf{x}_{n+1} \rangle.
+\]
+
+This concludes the proof. We have simply followed the update rule \eqref{Z-update} to its logical conclusion.
+
+\subsection{Full Proof of Proposition 1}
+
+\textit{A memory-augmented Transformer can implement Conjugate Gradient Descent (CGD) through a dynamic memory mechanism that recursively refines search directions, where the update rules are:}
+\begin{align}
+    \mathbf{R}_\ell &= \mathrm{Attn}_{P_\ell, Q_\ell}(\mathbf{Z}_\ell) + \gamma_\ell \mathbf{R}_{\ell-1}, \label{eq:dynamic-mem_update_proof} \\
+    \mathbf{Z}_{\ell+1} &= \mathbf{Z}_\ell + \alpha_\ell \frac{1}{n} \mathbf{R}_\ell, \label{eq:dynamic-mem_proof}
+\end{align}
+\textit{where \( \gamma_\ell \) and \( \alpha_\ell \) control past update influence and step size.}
+
+\subsubsection*{Proof}
+Our goal is to demonstrate that, under appropriate parameter configurations, the memory-augmented Transformer updates given by equations \eqref{eq:dynamic-mem_update_proof} and \eqref{eq:dynamic-mem_proof} correspond precisely to the Conjugate Gradient Descent (CGD) algorithm when applied to the quadratic loss function:
+\begin{equation}
+    R_{\mathbf{w}^*}(\mathbf{w}) = \frac{1}{2n} (\mathbf{w} - \mathbf{w}^*)^\top \mathbf{X} \mathbf{X}^\top (\mathbf{w} - \mathbf{w}^*). \label{eq:quadratic_loss}
+\end{equation}
+
+We will establish a mapping between the Transformer's operations and the steps of the CGD algorithm, demonstrating that the Transformer can implement CGD under certain parameter settings.
+
+\subsubsection*{CGD Algorithm for Quadratic Functions}
+For minimizing a quadratic function, the CGD algorithm proceeds as follows:
+
+\begin{algorithm}
+\caption*{\textbf{Algorithm}. Conjugate Gradient Descent (CGD)}
+\begin{algorithmic}
+    \State Initialize \( \mathbf{w}_0 \) and \( \mathbf{r}_0 = -\nabla f(\mathbf{w}_0) \), \( \mathbf{s}_0 = \mathbf{r}_0 \)
+    \State \(\mathbf{w}_1 = \mathbf{w}_0 + \mathbf{r}_0\)
+    \For{$n = 1, 2, \dots$}
+        \State Compute the residual: \( \mathbf{r}_n = -\nabla f(\mathbf{w}_n) \)
+        \State Compute the conjugacy coefficient: 
+        \[
+        \gamma_n = \frac{\mathbf{r}_n^\top \mathbf{r}_n}{\mathbf{r}_{n-1}^\top \mathbf{r}_{n-1}}
+        \]
+        \State Update the search direction: 
+        \[
+        \mathbf{s}_n = \mathbf{r}_n + \gamma_n \mathbf{s}_{n-1}
+        \]
+        \State Compute the step size: 
+        \[
+        \alpha_n = \frac{\mathbf{r}_n^\top \mathbf{r}_n}{\mathbf{s}_n^\top \mathbf{H} \mathbf{s}_n}
+        \]
+        \State Update the parameters: 
+        \[
+        \mathbf{w}_{n+1} = \mathbf{w}_n + \alpha_n \mathbf{s}_n
+        \]
+    \EndFor
+\end{algorithmic}
+\end{algorithm}
+\FloatBarrier
+
+\subsubsection*{Mapping CGD Updates to Transformer Updates}
+
+We first recall that in the proof of Lemma 1 (\ref{Proof of Lemma 1}), the \(\mathbf{w}_{k+1}^{\text{gd}}\) update rule
+\begin{equation}
+\mathbf{w}_{k+1}^{\text{gd}} = \mathbf{w}_k^{\text{gd}} - \frac{1}{n} A_k \nabla R_{\mathbf{w}^*}(\mathbf{w}_k^{\text{gd}}), \label{wk_update}
+\end{equation}
+is a direct downstream consequence of the \(\mathbf{Z}_{\ell+1}\) update rule \eqref{Z-update}
+\begin{equation}
+\mathbf{Z}_{\ell+1} = \mathbf{Z}_\ell + \frac{1}{n} \mathrm{Attn}_{P_\ell, Q_\ell} (\mathbf{Z}_\ell), \quad \ell = 0, 1, \dots, L-1,
+\end{equation}
+under the parameterization given in equation \eqref{params_Thm3}. Thus, the \(\mathrm{Attn}_{P_\ell, Q_\ell}\) term in the \(\mathbf Z_\ell\) update equation is, in a precise sense, paralleled by the \(-\frac{1}{n} A_k \nabla R_{\mathbf{w}^*}(\mathbf{w}_k^{\text{gd}})\) term in the \(\mathbf{w}_{k+1}^{\text{gd}}\) update equation \eqref{wk_update}.
+
+\subsubsection*{Step 1: Initialization}
+\begin{itemize}
+    \item \textbf{CGD:}
+    \[
+    \mathbf{w}_0 \text{ given}, \quad \mathbf{r}_0 = -\nabla f(\mathbf{w}_0), \quad \mathbf{s}_0 = \mathbf{r}_0.
+    \]
+    \item \textbf{Transformer:}
+    \begin{itemize}
+        \item The initial state \( \mathbf{Z}_0 \) in \eqref{Z-update} parallels \( \mathbf{w}_0 \) in \eqref{wk_update}.
+        \item The memory register \( \mathbf{R} \) is initialized to \(\mathrm{Attn}_{P_0, Q_0}(\mathbf{Z}_0)\), i.e., \( \mathbf{R}_{0} =  \mathrm{Attn}_{P_0, Q_0}(\mathbf{Z}_0)\), corresponding to \( \mathbf{s}_{0} = \mathbf{r}_0 \).
+        \item We set \( \gamma_0 = 0 \), consistent with CGD initialization.
+    \end{itemize}
+\end{itemize}
+
+\subsubsection*{Step 2: Update Memory Register (Search Direction)}
+\begin{itemize}
+    \item \textbf{Transformer Memory Update:}
+    \[
+    \mathbf{R}_\ell = \mathrm{Attn}_{P_\ell, Q_\ell}(\mathbf{Z}_\ell) + \gamma_\ell \mathbf{R}_{\ell-1}.
+    \]
+    \item \textbf{Correspondence with CGD:}
+    \[
+    \mathbf{s}_n = \mathbf{r}_n + \gamma_n \mathbf{s}_{n-1}.
+    \]
+    Identifying \( \mathbf{R}_\ell \leftrightarrow \mathbf{s}_n \), \( \gamma_\ell = \gamma_n \), and \( \mathbf{R}_{\ell-1} \leftrightarrow \mathbf{s}_{n-1} \), the Transformer's memory update matches CGD.
+\end{itemize}
+
+\subsubsection*{Step 3: Update Parameters}
+\begin{itemize}
+    \item \textbf{Transformer Parameter Update:}
+    \[
+    \mathbf{Z}_{\ell+1} = \mathbf{Z}_\ell + \alpha_\ell \frac{1}{n} \mathbf{R}_\ell.
+    \]
+    \item \textbf{Correspondence with CGD:}
+    \[
+    \mathbf{w}_{n+1} = \mathbf{w}_n + \alpha_n \mathbf{s}_n.
+    \]
+    The scaling factor \( \frac{1}{n} \) accounts for the gradient's scaling, consistent with the CGD update when considering the Hessian \( \mathbf{H} = \frac{1}{n} \mathbf{X} \mathbf{X}^\top \).
+\end{itemize}
+
+\subsubsection*{Step 4: Conjugacy Coefficient \(\gamma_\ell\) and Step Size \(\alpha_\ell\)}
+\begin{itemize}
+    \item \textbf{CGD Computations}: Scalar values computed based on residuals and the Hessian.
+    \item \textbf{Transformer Implementation}: 
+    \begin{itemize}
+        \item \( \gamma_\ell \) and \( \alpha_\ell \) are treated as parameters, ensuring structural correspondence.
+        \item The Transformer's architecture allows these as fixed or learnable parameters.
+    \end{itemize}
+\end{itemize}
+
+Therefore, under suitable parameter configurations, the memory-augmented Transformer can implement CGD, demonstrating the feasibility of using the Transformer's architecture to perform CGD-like updates.
+
+\subsection{Full Proof of Proposition 2}
+
+\textit{A memory-augmented Transformer can implement \( k \) steps of Linear First-Order Methods (LFOMs) by maintaining memory registers across layers, where the update rules are:
+    \begin{equation}
+        \mathbf{R}_\ell = \mathrm{Attn}_{P_\ell, Q_\ell}(\mathbf{Z}_\ell), \label{Memformer_R_update}
+    \end{equation}
+    \begin{equation}
+        \mathbf{Z}_{\ell+1} = \mathbf{Z}_\ell + \frac{1}{n} \sum_{j=0}^{\ell} \Gamma_j^\ell \odot \mathbf{R}_j, \label{Memformer_Z_update}
+    \end{equation}
+    where \( \Gamma_j^\ell \) governs the contribution of previous layers, and \( \odot \) is the Hadamard (element-wise) product for scaling.}
+
+Our goal is to show that the memory-augmented Transformer with updates given by equations \eqref{Memformer_R_update} and \eqref{Memformer_Z_update} can implement \( k \) steps of an LFOM, whose general formulation is:
+\[
+    \mathbf{w}^{k+1} = \mathbf{w}^0 + \sum_{i=0}^k \Lambda_i^k \nabla f(\mathbf{w}^i), \label{eq:LFOM_update}
+\]
+where \(\Lambda_i^k\) are diagonal matrices that scale the gradients \(\nabla f(\mathbf{w}^i)\).
+
+We will proceed by establishing a correspondence between the variables and updates in the memory-augmented Transformer and those in the LFOM, and by showing that, under appropriate parameter settings, the Transformer updates replicate the LFOM updates.
+
+The first order of business is to realize that, in the proof of Lemma 1 (\ref{Proof of Lemma 1}), the \(\mathbf{w}_{k+1}^{\text{gd}}\) update rule \eqref{wk_update} is a direct downstream consequence of the \(\mathbf{Z}_{\ell+1}\) update rule \eqref{Z-update}, under the parameterization given in equation \eqref{params_Thm3}.
+
+Set \(\mathbf{R}_\ell = \mathrm{Attn}_{P_\ell, Q_\ell}(\mathbf{Z}_\ell)\) per \eqref{Memformer_R_update}. Then the consequence of the \(\mathbf{Z}_{\ell+1} = \mathbf{Z}_\ell + \frac{1}{n} \sum_{j=0}^{\ell} \Gamma_j^\ell \odot \mathbf{R}_j\) update rule is that each \(\mathrm{Attn}_{P_j, Q_j}(\mathbf{Z}_j)\) is coordinate-wise scaled by \(\Gamma_j^\ell \in \mathbb{R}^{(d + 1) \times (n + 1)}\). But if \(\mathrm{Attn}_{P_j, Q_j}(\mathbf{Z}_j)\) is coordinate-wise scaled by \(\Gamma_j^\ell\), then the \(\mathbf{Y}_{k+1}\) update rule in \eqref{Yk_update} now instead looks like \(\mathbf{Y}_{k+1} = \mathbf{Y}_k - \frac{1}{n} \sum_{j=0}^{k} \Gamma_j^k \big|_{d+1} \odot (\mathbf{Y}_k M \mathbf{X}_0^\top A_k \mathbf{X}_0)\), where \(\Gamma_j^k \big|_{d+1}\) denotes the \((d + 1)\)-th row of \(\Gamma_j^k\). This is because, by definition, \(\mathbf{Y}_i\) is the \((d+1)\)-th row of \(\mathbf{Z}_i\) (\ref{Proof of Lemma 1}).
+
+From the basic \(\mathbf{Y}_k\) update rule in \eqref{Yk_update}, the update formula for \(\mathbf{y}_{n+1}^{(k+1)}\) in \eqref{yn_update} follows as a consequence. Except that now, this update formula will include a coordinate-wise scaling as well, which we will denote by \(\Lambda_j^k \in \mathbb{R}^{d}\):
+\[
+\mathbf{y}_{n+1}^{(k+1)} = \mathbf{y}_{n+1}^{(k)} - \frac{1}{n} \sum_{j=0}^{k}\langle (A_j \mathbf{\bar{X}}^\top \mathbf{\bar{Y}}_j) \odot \Lambda_j^k, \mathbf{x}_{n+1} \rangle,
+\label{scaled_yn_update}
+\]
+which in turn leads to \(\mathbf{\theta}_{k+1} = \mathbf{\theta}_k - \frac{1}{n} \sum_{j=0}^{k} (A_j \mathbf{\bar{X}} \mathbf{\bar{X}}^\top (\mathbf{\theta}_j + \mathbf{w}^*)) \odot \Lambda_j^k\) in place of \eqref{thetak_update} and \(\mathbf{w}_{k+1}^{\text{gd}} = \mathbf{w}_k^{\text{gd}} - \frac{1}{n} \sum_{j=0}^{k} A_j \nabla R_{\mathbf{w}^*}(\mathbf{w}_j^{\text{gd}}) \odot \Lambda_j^k\) in place of \eqref{theta_k_preconditionedGD}. The negative signs can, of course, be incorporated within the \(\Lambda_j^k\)s.
+
+If we simply rewrite \(\Lambda_j^k \in \mathbb R^{d}\) as a diagonal matrix in \(\mathbb R^{d \times d}\), this setup then subsumes the case of diagonal preconditioners \(\Lambda_j^k \in \mathbb R^{d \times d}\) acting on the gradients \( \nabla R_{\mathbf{w}^*}(\mathbf{w}_j^{\mathrm{gd}}) \), which in the general form looks like:
+    \begin{equation}
+    \mathbf{w}_{k+1}^{\mathrm{gd}} = \mathbf{w}_0 + \sum_{i=0}^k \Lambda_i^k \nabla R_{\mathbf{w}^*}(\mathbf{w}_i^{\mathrm{gd}}).
+    \end{equation}
+where \(\Lambda_i^k\) are diagonal matrices.
+
+\textbf{\textit{Note.}} The memory-augmented Transformer performs exactly these updates in the special case when the preconditioners \(A_j\) are scalar multiples of the identity. If the preconditioners \(A_j\) are non-trivial, then this architecture performs \textbf{``LFOM-like"} algorithms that lie in a class richer than LFOMs (\ref{Sec:LFOM-mem}). 
+
+\section{Comparison to Nesterov Accelerated Gradient Method (NAG) and Momentum Gradient Descent (MGD)}
+
+\subsection{Nesterov Accelerated Gradient Method (NAG)}
+
+NAG is a commonly used optimization technique that builds on classical gradient descent by incorporating a momentum term that anticipates the next update. Specifically, the weights are updated using the following update rules:
+
+\[
+\mathbf{v}_{k+1} = \mathbf{w}_k + \beta_k (\mathbf{w}_k - \mathbf{w}_{k-1})
+\]
+\[
+\mathbf{w}_{k+1} = \mathbf{v}_{k+1} - \eta_k \nabla f(\mathbf{v}_{k+1})
+\]
+
+Here, \( \beta_k \) controls the influence of previous updates (momentum), and \( \eta_k \) is the learning rate. In our experiments, we selected \( \eta_k = 0.03 \) and \( \beta_k = 0.9 \) after testing various values of these parameters on the given distribution, as in Section \ref{Section:Experimental_Results}. These values provided the best performance. The momentum term allows NAG to ``look ahead" in the optimization trajectory, which often leads to faster convergence than vanilla gradient descent.
+
+\subsection{Momentum Gradient Descent (MGD)}
+
+Momentum Gradient Descent operates similarly to NAG but without the anticipation of future steps. The algorithm updates the weights based on a momentum term that accelerates convergence in directions with consistent gradients. The update rule for MGD is given by:
+
+\[
+\mathbf{v}_{k+1} = \beta_k \mathbf{v}_k - \eta_k \nabla f(\mathbf{w}_k)
+\]
+\[
+\mathbf{w}_{k+1} = \mathbf{w}_k + \mathbf{v}_{k+1}
+\]
+
+In our experiments, the learning rate \( \eta_k = 0.005 \) and momentum parameter \( \beta_k = 0.9 \) provided the best results on the given distribution, as in Section 
+\ref{Section:Experimental_Results}. Momentum helps to mitigate oscillations in directions with high curvature, stabilizing the optimization trajectory and leading to faster convergence compared to gradient descent.
+
+\subsection{Memformers vs. NAG and MGD}
+
+In our experiments, we observed that Memformers \eqref{LFOM_memory} outperform both NAG and MGD on non-isotropic data. Figures~\ref{fig:nag_vs_Memformer} and \ref{fig:mgd_vs_Memformer} compare the performance of Memformer with NAG and MGD, respectively, on the same non-isotropic data. As shown, the Memformer achieves faster convergence and much better loss performance compared to both algorithms.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{Nesterov_AGM_Experiments.png}
+    \caption{Nesterov AGM vs. LFOM Memformer on non-isotropic data.}
+    \label{fig:nag_vs_Memformer}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{Momentum_GD_Experiment.png}
+    \caption{Momentum GD vs. LFOM Memformer on non-isotropic data.}
+    \label{fig:mgd_vs_Memformer}
+  \end{subfigure}
+  \caption{Comparison of Nesterov Accelerated Gradient Method (left) and Momentum Gradient Descent (right) vs. LFOM Memformer on non-isotropic data.}
+  \label{fig:nag_mgd_comparison}
+\end{figure}
+
+\section{Memformer Experiments With More Than 4 Layers}
+
+In our experiments, we observed that Memformers with more than 4 layers continue to demonstrate impressive performance in learning optimization strategies. We conducted experiments with Memformers having up to 7 layers and dimension \( d = 10 \). Training beyond this point becomes impractical due to extensive iteration requirements and significant convergence times, which can span several hours. This limitation is a consequence of computational constraints (e.g., available GPUs) rather than any inherent deficiency of the Memformer architecture itself.
+
+Here, \( d \) refers to the rank of the square matrix \( \mathbf{X} \mathbf{X}^T \) in the empirical loss quadratic as described in Equation \ref{in-context-loss}.
+
+1. \textbf{Experiment \ref{fig:layers5}} (Dimension \( d = 5 \), Layers = 5): As expected, Conjugate Gradient Descent (CGD) converges within \( d \) steps due to the dimensionality constraint. Remarkably, even though the Memformer only learns general parameters \( \mathbf{A}_\ell \) (Equation 9) and \( \Gamma_\ell \) (Equation 20), it manages to keep up with CGD for up to 4 steps, showcasing its efficiency.
+
+2. \textbf{Experiment \ref{fig:layers7}} (Dimension \( d = 10 \), Layers = 7): In this case, CGD does not converge until beyond 7 steps, which aligns with theoretical expectations. Nevertheless, the Memformer remains highly competitive, matching CGD's performance for 6 steps and even performing comparably at 7 steps. This demonstrates the Memformer’s robust generalization capabilities, even under more complex conditions.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{Layers=5d=5.png}
+    \caption{Memformer performance for \( d = 5 \) with 5 layers.}
+    \label{fig:layers5}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{Layers=7d=10.png}
+    \caption{Memformer performance for \( d = 10 \) with 7 layers.}
+    \label{fig:layers7}
+  \end{subfigure}
+  \caption{Performance comparison of Memformers with CGD for various dimensions and layer configurations.}
+  \label{fig:Memformer_experiments}
+\end{figure}
+
+\section{Experiment on Convergence Verification for Memformer Parameter \( \mathbf{A}_\ell \) to \( \Sigma \)}
+
+Our strategy to train the Memformer \eqref{LFOM_memory} was to first train the \( A_\ell \)'s \eqref{params_Thm3} in each layer \(\ell\) on the training batch and then to ``fine-tune" the \( \Gamma_\ell \)'s on the training batch. Therefore, we present here an empirical verification of our results per \textbf{Theorem 3} in \cite{ahn2024transformers}. 
+
+\textbf{Theorem 3. (\cite{ahn2024transformers})} \textit{Assume that \( x^{(i)} \overset{\text{iid}}{\sim} \mathcal{N}(0, \Sigma) \) and \( w_x \sim \mathcal{N}(0, \Sigma^{-1}) \), for \( i = 1, \ldots, n \), and for some \( \Sigma \succ 0 \). Consider the optimization of in-context loss \eqref{in-context_f} for a \( k \)-layer transformer with the parameter configuration in Eq. \eqref{params_Thm3} given by:
+\[
+\min_{\{A_\ell\}_{\ell=0}^{L-1}} f(A).
+\]
+Let \( S \subset \mathbb{R}^{L \times d \times d} \) be defined as follows: \( A \in S \) if and only if for all \( i = 0, \ldots, L-1 \), there exist scalars \( a_i \in \mathbb{R} \) such that \( A_i = a_i \Sigma^{-1} \). Then
+\[
+\inf_{(A, B) \in S} \sum_{i=0}^{L-1} \|\nabla_{A_i} f(A, B)\|_F^2 = 0,
+\]
+where \( \nabla_{A_i} f \) denotes the derivative with respect to the Frobenius norm \( \|A_i\|_F \).}
+
+We evaluated the in-context learning (ICL) loss for linear regression with \( d = 5 \) and \( n = 20 \), where \( x^{(i)} \sim \mathcal{N}(0, \Sigma) \) and \( w_x \sim \mathcal{N}(0, \Sigma^{-1}) \). The covariance \( \Sigma \) was generated as \( \Sigma = U^T D U \), with \( U \) being a random orthogonal matrix and \( D = \text{diag}(1, 1, 1/4, 1/16, 1) \). A three-layer linear transformer was trained using ADAM, with \( A_0, A_1, A_2 \) initialized as i.i.d. Gaussian matrices. Each gradient step used minibatches of size 20,000, resampled every 100 steps, and gradients were clipped to 0.01. Results were averaged over 5 runs with independent \( U \) and \( \Sigma \) samples.
+
+To measure convergence, we computed the normalized Frobenius norm distance:
+\[
+\text{Dist}(M, I) := \min_{\alpha} \frac{\| M - \alpha I \|_F}{\| M \|_F}, \quad \alpha := \frac{1}{d} \sum_{i=1}^d M[i, i],
+\]
+which quantifies the deviation of \( M / \| M \|_F \) from a scaled identity. The distance \(\text{Dist}(\Sigma^{1/2} A_i \Sigma^{1/2}, I)\), averaged over 5 runs, is shown in Figures \ref{fig:sigma_a0}, \ref{fig:sigma_a1}, and \ref{fig:sigma_a2} as a function of training iterations.
+
+\begin{figure}[htbp]
+  \centering
+  \begin{subfigure}[b]{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{SigmaA0.png}
+    \caption{\( A_0 \) convergence.}
+    \label{fig:sigma_a0}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{SigmaA1.png}
+    \caption{\( A_1 \) convergence.}
+    \label{fig:sigma_a1}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{SigmaA2.png}
+    \caption{\( A_2 \) convergence.}
+    \label{fig:sigma_a2}
+  \end{subfigure}
+  \caption{Convergence of \( \Sigma^{1/2} A_i \Sigma^{1/2} \) to the scaled identity matrix for each \( i \), as predicted by Theorem 3 of \cite{ahn2024transformers}.}
+  \label{fig:convergence_plots}
+\end{figure}
+\end{document}

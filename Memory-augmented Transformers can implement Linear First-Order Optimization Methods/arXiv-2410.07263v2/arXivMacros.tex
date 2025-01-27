@@ -1,0 +1,39 @@
+%% File: macros.tex
+%% Macros for the arxiv submission
+
+% Theorem environments
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{prop}{Proposition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{corollary}[lemma]{Corollary}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+
+% Math operators
+\newcommand{\dist}{\mathrm{d}}
+\DeclareMathOperator{\Exp}{Exp}
+\DeclareMathOperator{\Ric}{Ric}
+
+% Define colors
+\definecolor{cdarkred}{rgb}{0.55,0.0,0.0}
+\definecolor{darkblue}{rgb}{0.0,0.0,0.55}
+\definecolor{cgray}{gray}{0.55}
+\definecolor{cdarkblue}{RGB}{30,30,200}
+
+% Comments and formatting
+\newcommand{\sra}[1]{\noindent{\textcolor{OliveGreen}{\{{\textbf{SS:}} \em #1\}}}}
+
+% Color commands
+\newcommand{\darkgreen}[1]{{\color{OliveGreen} #1}}
+\newcommand{\bgreen}[1]{{\color{OliveGreen} \textbf{\emph{#1}}}}
+\newcommand{\darkblue}[1]{{\color{cdarkblue} #1}}
+\newcommand{\darkred}[1]{{\color{cdarkred} #1}}
+\newcommand{\bfbrown}[1]{{\color{cdarkred}\textbf{#1}}}
+\newcommand{\bblue}[1]{{\color{cdarkblue}\textbf{\emph{#1}}}}
+
+% Headings with icons
+\newcommand{\parhead}[1]{{\footnotesize$\color{cgray}{\blacksquare}$}~\darkred{\bfseries #1}}
+\newcommand{\sparhead}[1]{{\tiny$\color{cgray}{\blacksquare}$}~\darkred{\bfseries #1}}
