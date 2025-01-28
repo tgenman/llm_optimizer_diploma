@@ -1,3 +1,69 @@
+@article{Xu_Liang_Cheng_Wei_Chen_Zhang_2021,
+    author={Xu, Dongkuan and Liang, Junjie and Cheng, Wei and Wei, Hua and Chen, Haifeng and Zhang, Xiang},
+    title={Transformer-Style Relational Reasoning with Dynamic Memory Updating for Temporal Network Modeling},
+    volume={35},
+    url={https://ojs.aaai.org/index.php/AAAI/article/view/16583},
+    DOI={10.1609/aaai.v35i5.16583},
+    abstractNote={Network modeling aims to learn the latent representations of nodes such that the representations preserve both network structures and node attribute information. This problem is fundamental due to its prevalence in numerous domains. However, existing approaches either target the static networks or struggle to capture the complicated temporal dependency, while most real-world networks evolve over time and the success of network modeling hinges on the understanding of how entities are temporally connected. In this paper, we present TRRN, a transformer-style relational reasoning network with dynamic memory updating, to deal with the above challenges. TRRN employs multi-head self-attention to reason over a set of memories, which provides a multitude of shortcut paths for information to flow from past observations to the current latent representations. By utilizing the policy networks augmented with differentiable binary routers, TRRN estimates the possibility of each memory being activated and dynamically updates the memories at the time steps when they are most relevant. We evaluate TRRN with the tasks of node classification and link prediction on four real temporal network datasets. Experimental results demonstrate the consistent performance gains for TRRN over the leading competitors.},
+    number={5},
+    journal={Proceedings of the AAAI Conference on Artificial Intelligence},
+    year={2021},
+    month={May},
+    pages={4546-4554}
+}
+
+@InProceedings{pmlr-v202-von-oswald23a,
+    title = 	 {Transformers Learn In-Context by Gradient Descent},
+    author =       {Von Oswald, Johannes and Niklasson, Eyvind and Randazzo, Ettore and Sacramento, Joao and Mordvintsev, Alexander and Zhmoginov, Andrey and Vladymyrov, Max},
+    booktitle = 	 {Proceedings of the 40th International Conference on Machine Learning},
+    pages = 	 {35151--35174},
+    year = 	 {2023},
+    editor = 	 {Krause, Andreas and Brunskill, Emma and Cho, Kyunghyun and Engelhardt, Barbara and Sabato, Sivan and Scarlett, Jonathan},
+    volume = 	 {202},
+    series = 	 {Proceedings of Machine Learning Research},
+    month = 	 {23--29 Jul},
+    publisher =    {PMLR},
+    pdf = 	 {https://proceedings.mlr.press/v202/von-oswald23a/von-oswald23a.pdf},
+    url = 	 {https://proceedings.mlr.press/v202/von-oswald23a.html},
+    abstract = 	 {At present, the mechanisms of in-context learning in Transformers are not well understood and remain mostly an intuition. In this paper, we suggest that training Transformers on auto-regressive objectives is closely related to gradient-based meta-learning formulations. We start by providing a simple weight construction that shows the equivalence of data transformations induced by 1) a single linear self-attention layer and by 2) gradient-descent (GD) on a regression loss. Motivated by that construction, we show empirically that when training self-attention-only Transformers on simple regression tasks either the models learned by GD and Transformers show great similarity or, remarkably, the weights found by optimization match the construction. Thus we show how trained Transformers become mesa-optimizers i.e. learn models by gradient descent in their forward pass. This allows us, at least in the domain of regression problems, to mechanistically understand the inner workings of in-context learning in optimized Transformers. Building on this insight, we furthermore identify how Transformers surpass the performance of plain gradient descent by learning an iterative curvature correction and learn linear models on deep data representations to solve non-linear regression tasks. Finally, we discuss intriguing parallels to a mechanism identified to be crucial for in-context learning termed induction-head (Olsson et al., 2022) and show how it could be understood as a specific case of in-context learning by gradient descent learning within Transformers.}
+}
+
+@InProceedings{garg2022can,
+    author = {Garg, Shivam and Tsipras, Dimitris and Liang, Percy S and Valiant, Gregory},
+    booktitle = {Advances in Neural Information Processing Systems},
+    editor = {S. Koyejo and S. Mohamed and A. Agarwal and D. Belgrave and K. Cho and A. Oh},
+    pages = {30583--30598},
+    publisher = {Curran Associates, Inc.},
+    title = {What Can Transformers Learn In-Context? A Case Study of Simple Function Classes},
+    url = {https://proceedings.neurips.cc/paper_files/paper/2022/file/c529dba08a146ea8d6cf715ae8930cbe-Paper-Conference.pdf},
+    volume = {35},
+    year = {2022}
+}
+
+@InProceedings{NEURIPS2020_1457c0d6,
+    author = {Brown, Tom and Mann, Benjamin and Ryder, Nick and Subbiah, Melanie and Kaplan, Jared D and Dhariwal, Prafulla and Neelakantan, Arvind and Shyam, Pranav and Sastry, Girish and Askell, Amanda and Agarwal, Sandhini and Herbert-Voss, Ariel and Krueger, Gretchen and Henighan, Tom and Child, Rewon and Ramesh, Aditya and Ziegler, Daniel and Wu, Jeffrey and Winter, Clemens and Hesse, Chris and Chen, Mark and Sigler, Eric and Litwin, Mateusz and Gray, Scott and Chess, Benjamin and Clark, Jack and Berner, Christopher and McCandlish, Sam and Radford, Alec and Sutskever, Ilya and Amodei, Dario},
+    booktitle = {Advances in Neural Information Processing Systems},
+    editor = {H. Larochelle and M. Ranzato and R. Hadsell and M.F. Balcan and H. Lin},
+    pages = {1877--1901},
+    publisher = {Curran Associates, Inc.},
+    title = {Language Models are Few-Shot Learners},
+    url = {https://proceedings.neurips.cc/paper_files/paper/2020/file/1457c0d6bfcb4967418bfb8ac142f64a-Paper.pdf},
+    volume = {33},
+    year = {2020}
+}
+
+@InProceedings{NEURIPS2022_9d560961,
+    author = {Wei, Jason and Wang, Xuezhi and Schuurmans, Dale and Bosma, Maarten and ichter, brian and Xia, Fei and Chi, Ed and Le, Quoc V and Zhou, Denny},
+    booktitle = {Advances in Neural Information Processing Systems},
+    editor = {S. Koyejo and S. Mohamed and A. Agarwal and D. Belgrave and K. Cho and A. Oh},
+    pages = {24824--24837},
+    publisher = {Curran Associates, Inc.},
+    title = {Chain-of-Thought Prompting Elicits Reasoning in Large Language Models},
+    url = {https://proceedings.neurips.cc/paper_files/paper/2022/file/9d5609613524ecf4f15af0f7b31abca4-Paper-Conference.pdf},
+    volume = {35},
+    year = {2022}
+}
+
 @misc{dutta2024memoryaugmentedtransformersimplementlinear,
       title={Memory-augmented Transformers can implement Linear First-Order Optimization Methods}, 
       author={Sanchayan Dutta and Suvrit Sra},
@@ -38,19 +104,102 @@
       url={https://arxiv.org/abs/2102.11174}, 
 }
 
+@misc{akyurek2022learning,
+    title={What learning algorithm is in-context learning? Investigations with linear models},
+    author={Ekin Akyürek and Dale Schuurmans and Jacob Andreas and Tengyu Ma and Denny Zhou},
+    year={2022},
+    eprint={2211.15661},
+    archivePrefix={arXiv},
+    primaryClass={cs.LG},
+    url={https://arxiv.org/abs/2211.15661},
+}
 
-@InProceedings{pmlr-v202-von-oswald23a,
-  title = 	 {Transformers Learn In-Context by Gradient Descent},
-  author =       {Von Oswald, Johannes and Niklasson, Eyvind and Randazzo, Ettore and Sacramento, Joao and Mordvintsev, Alexander and Zhmoginov, Andrey and Vladymyrov, Max},
-  booktitle = 	 {Proceedings of the 40th International Conference on Machine Learning},
-  pages = 	 {35151--35174},
-  year = 	 {2023},
-  editor = 	 {Krause, Andreas and Brunskill, Emma and Cho, Kyunghyun and Engelhardt, Barbara and Sabato, Sivan and Scarlett, Jonathan},
-  volume = 	 {202},
-  series = 	 {Proceedings of Machine Learning Research},
-  month = 	 {23--29 Jul},
-  publisher =    {PMLR},
-  pdf = 	 {https://proceedings.mlr.press/v202/von-oswald23a/von-oswald23a.pdf},
-  url = 	 {https://proceedings.mlr.press/v202/von-oswald23a.html},
-  abstract = 	 {At present, the mechanisms of in-context learning in Transformers are not well understood and remain mostly an intuition. In this paper, we suggest that training Transformers on auto-regressive objectives is closely related to gradient-based meta-learning formulations. We start by providing a simple weight construction that shows the equivalence of data transformations induced by 1) a single linear self-attention layer and by 2) gradient-descent (GD) on a regression loss. Motivated by that construction, we show empirically that when training self-attention-only Transformers on simple regression tasks either the models learned by GD and Transformers show great similarity or, remarkably, the weights found by optimization match the construction. Thus we show how trained Transformers become mesa-optimizers i.e. learn models by gradient descent in their forward pass. This allows us, at least in the domain of regression problems, to mechanistically understand the inner workings of in-context learning in optimized Transformers. Building on this insight, we furthermore identify how Transformers surpass the performance of plain gradient descent by learning an iterative curvature correction and learn linear models on deep data representations to solve non-linear regression tasks. Finally, we discuss intriguing parallels to a mechanism identified to be crucial for in-context learning termed induction-head (Olsson et al., 2022) and show how it could be understood as a specific case of in-context learning by gradient descent learning within Transformers.}
+@misc{fu2023transformerslearnachievesecondorder,
+    title={Transformers Learn Higher-Order Optimization Methods for In-Context Learning: A Study with Linear Models},
+    author={Deqing Fu and Tian-Qi Chen and Robin Jia and Vatsal Sharan},
+    year={2023},
+    eprint={2310.17086},
+    archivePrefix={arXiv},
+    primaryClass={cs.LG},
+    url={https://arxiv.org/abs/2310.17086},
+}
+
+@misc{giannou2024transformersemulateincontextnewtons,
+    title={How Well Can Transformers Emulate In-context Newton's Method?},
+    author={Angeliki Giannou and Liu Yang and Tianhao Wang and Dimitris Papailiopoulos and Jason D. Lee},
+    year={2024},
+    eprint={2403.03183},
+    archivePrefix={arXiv},
+    primaryClass={cs.LG},
+    url={https://arxiv.org/abs/2403.03183},
+}
+
+@misc{vladymyrov2024lineartransformersversatileincontext,
+    title={Linear Transformers are Versatile In-Context Learners},
+    author={Max Vladymyrov and Johannes von Oswald and Mark Sandler and Rong Ge},
+    year={2024},
+    eprint={2402.14180},
+    archivePrefix={arXiv},
+    primaryClass={cs.LG},
+    url={https://arxiv.org/abs/2402.14180},
+}
+
+@misc{liu2021makesgoodincontextexamples,
+    title={What Makes Good In-Context Examples for GPT-$3$?},
+    author={Jiachang Liu and Dinghan Shen and Yizhe Zhang and Bill Dolan and Lawrence Carin and Weizhu Chen},
+    year={2021},
+    eprint={2101.06804},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL},
+    url={https://arxiv.org/abs/2101.06804},
+}
+
+@misc{lu2022fantasticallyorderedpromptsthem,
+    title={Fantastically Ordered Prompts and Where to Find Them: Overcoming Few-Shot Prompt Order Sensitivity},
+    author={Yao Lu and Max Bartolo and Alastair Moore and Sebastian Riedel and Pontus Stenetorp},
+    year={2022},
+    eprint={2104.08786},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL},
+    url={https://arxiv.org/abs/2104.08786},
+}
+
+@misc{wu2023selfadaptiveincontextlearninginformation,
+    title={Self-Adaptive In-Context Learning: An Information Compression Perspective for In-Context Example Selection and Ordering},
+    author={Zhiyong Wu and Yaoxiang Wang and Jiacheng Ye and Lingpeng Kong},
+    year={2022},
+    eprint={2212.10375},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL},
+    url={https://arxiv.org/abs/2212.10375},
+}
+
+@misc{xie2022explanationincontextlearningimplicit,
+    title={An Explanation of In-context Learning as Implicit Bayesian Inference},
+    author={Sang Michael Xie and Aditi Raghunathan and Percy Liang and Tengyu Ma},
+    year={2021},
+    eprint={2111.02080},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL},
+    url={https://arxiv.org/abs/2111.02080},
+}
+
+@misc{vonoswald2024uncoveringmesaoptimizationalgorithmstransformers,
+    title={Uncovering mesa-optimization algorithms in Transformers},
+    author={Johannes von Oswald and Maximilian Schlegel and Alexander Meulemans and Seijin Kobayashi and Eyvind Niklasson and Nicolas Zucchet and Nino Scherrer and Nolan Miller and Mark Sandler and Blaise Agüera y Arcas and Max Vladymyrov and Razvan Pascanu and João Sacramento},
+    year={2023},
+    eprint={2309.05858},
+    archivePrefix={arXiv},
+    primaryClass={cs.LG},
+    url={https://arxiv.org/abs/2309.05858},
+}
+
+@misc{hahn2023theoryemergentincontextlearning,
+    title={A Theory of Emergent In-Context Learning as Implicit Structure Induction},
+    author={Michael Hahn and Navin Goyal},
+    year={2023},
+    eprint={2303.07971},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL},
+    url={https://arxiv.org/abs/2303.07971},
 }

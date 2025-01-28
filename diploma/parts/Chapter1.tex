@@ -1,3 +1,107 @@
-\chapter{Постановка задачи}
+\chapter{Problem Setup}
 \label{sec:Chapter1} \index{Chapter1}
 
+In this thesis, we consider a standard \textbf{unconstrained minimization} problem in the context of linear regression. Let
+\[
+  \{(x^{(1)}, y^{(1)}), (x^{(2)}, y^{(2)}), \dots, (x^{(n)}, y^{(n)})\}
+\]
+be a set of $n$ training examples, where each $x^{(i)} \in \mathbb{R}^d$ is a feature vector, and each $y^{(i)} \in \mathbb{R}$ is the corresponding target. We assume there exists an unknown parameter vector $w^* \in \mathbb{R}^d$ such that 
+\[
+  y^{(i)} \;=\; \langle x^{(i)}, \, w^* \rangle 
+  \quad \text{(possibly up to additive noise).}
+\]
+
+Our goal is to recover or approximate $w^*$ by minimizing the empirical risk:
+\begin{equation}
+  \label{eq:empirical-risk}
+  R_{w^*}(w) \;=\; \frac{1}{2n} \Bigl\|\mathbf{X}^{\top} w \;-\; \mathbf{X}^{\top} w^*\Bigr\|^2,
+\end{equation}
+where $\mathbf{X}$ is the $d \times n$ matrix whose columns are the vectors $x^{(i)}$. 
+In classical optimization terms, we aim to solve:
+\[
+  \min_{w \,\in\, \mathbb{R}^d}\; R_{w^*}(w).
+\]
+When $\mathbf{X}$ has full column rank (or $x^{(i)}$ are sampled from a non-degenerate distribution), 
+the function $R_{w^*}(w)$ is convex and differentiable.
+
+\subsection{Iterative First-Order Methods}
+
+Many first-order optimization methods solve
+\[
+  \min_{w}\; f(w)
+\]
+by repeatedly updating $w$ using the gradient $\nabla f(w)$. A \emph{linear first-order method} (LFOM) 
+can be written generally as
+\begin{equation}
+  \label{eq:LFOM}
+  w_{k+1} \;=\; w_0 \;+\; \sum_{i=0}^{k}\Gamma_k^i\,\nabla f\bigl(w_i\bigr),
+\end{equation}
+where each $\Gamma_k^i$ is a (diagonal) matrix that scales the $i$-th gradient. This broad family includes, for example, gradient descent, momentum methods, and conjugate gradient descent for quadratic objectives.
+
+\subsection{Memory-Augmented Transformers (Memformers)}
+
+Recent studies show that Transformers \textbf{ memory-augmented} (also known as \emph{Memformers}) can \emph{implement} such iterative updates \emph{in-context} within their forward pass. Specifically, a Memformer can store and reuse intermediate computations (akin to saving previous gradients or partial solutions) via attention-based memory registers. Consequently, one can view the forward computation of a Memformer as performing gradient-based updates on \eqref{eq:empirical-risk}, effectively solving the linear regression problem. 
+
+Formally, if we denote the iteration at step $k$ by $w_k$, Memformers learn to realize updates of the form:
+\[
+  w_{k+1} \;=\; \text{update}\bigl(w_k,\;\nabla R_{w^*}(w_k),\;\text{memory}\bigr),
+\]
+where the \emph{memory} captures relevant quantities like past gradients. This parallels the LFOM expression in \eqref{eq:LFOM} but is carried out through a sequence of transformer layers and attention blocks.
+
+\subsection{Unconstrained Quadratic Example}
+
+In linear regression,
+\[   R_{w^*}(w) \;=\; \frac{1}{2n}   \Bigl\|\mathbf{X}^\top w \;-\; \mathbf{X}^\top w^*\Bigr\|^2, \],
+which is a convex quadratic function. Popular methods like gradient descent, momentum, or conjugate gradient all iteratively minimize this function. 
+Memformers replicate these methods by encoding partial iterates of the optimization trajectory into the attention layers.
+
+Thus, the learning goal optimization $w$ that minimizes \eqref{eq:empirical-risk} can be viewed as
+\[
+  \min_{w \,\in\, \mathbb{R}^d} \quad 
+  \frac{1}{2n}\|\mathbf{X}^\top w - \mathbf{X}^\top w^*\|^2,
+\]
+and is solved \emph{in-context} by the Memformer’s learned parameters and attention-based memory mechanism.
+
+
+\subsection{Lemma 1 \cite{ahn2024transformers}.}
+We consider an $L$-layer linear Transformer with parameter matrices 
+\[
+P_\ell = 
+\begin{bmatrix}
+\mathbf{B}_\ell = 0_{d \times d} & 0 \\
+0 & 1
+\end{bmatrix},
+\quad
+Q_\ell = 
+-\begin{bmatrix}
+\mathbf{A}_\ell & 0 \\
+0 & 0
+\end{bmatrix}, 
+\quad \mathbf{A}_\ell, \mathbf{B}_\ell \in \mathbb{R}^{d \times d}.
+\]
+Let $y_\ell^{(n+1)}$ denote the $(d+1,\,n+1)$-entry of the $\ell$-th layer output matrix~$\mathbf{Z}_\ell$, i.e., 
+\(
+   y_\ell^{(n+1)} = [\mathbf{Z}_\ell]_{(d+1),\,(n+1)}
+\)
+for $\ell = 1, \dots, L$. Then
+\[
+   y_\ell^{(n+1)} \;=\; -\,\bigl\langle \mathbf{x}^{(n+1)}, \,\mathbf{w}_\ell^{\mathrm{gd}}\bigr\rangle,
+\]
+where the sequence $\{\mathbf{w}_\ell^{\mathrm{gd}}\}$ is initialized by $\mathbf{w}_{0}^{\mathrm{gd}} = 0$ and, for $\ell = 1, \dots, L - 1,$ follows
+\[
+   \mathbf{w}_{\ell+1}^{\mathrm{gd}}
+   \;=\;
+   \mathbf{w}_{\ell}^{\mathrm{gd}}
+   \;-\;
+   \mathbf{A}_\ell 
+   \,\nabla R_{\mathbf{w}^*}\bigl(\mathbf{w}_{\ell}^{\mathrm{gd}}\bigr),
+\]
+with the empirical least-squares loss 
+\[
+   R_{\mathbf{w}^*}(w) 
+   \;:=\; 
+   \frac{1}{2n}\,\bigl\|\mathbf{X}^\top w - \mathbf{X}^\top w^*\bigr\|^2
+   \;=\;
+   \frac{1}{2n}\,
+   (w - w^*)^\top \,\mathbf{X}\,\mathbf{X}^\top \,(w - w^*).
+\]
