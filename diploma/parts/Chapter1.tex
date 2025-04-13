@@ -1,5 +1,48 @@
-\chapter{Problem Setup}
+\chapter{Problem Statement}
 \label{sec:Chapter1} \index{Chapter1}
+
+In the paradigm Idea→ Formula→ Code state the problem to find an optimal solution
+\begin{itemize}
+    \item Discuss the problem statement with your adviser.
+    \item See the examples below and in past projects.
+    \item Discuss terminology and notation. See [pdf] and [tex] with notations and a useful style file.
+    \item At the beginning of the Problem statement, write a general problem description.
+    \item Describe the elements of your problem statement:
+    \begin{itemize}
+        \item the sample set,
+        \item its origin, or its algebraic structure,
+        \item statistical hypotheses of data generation,
+        \item conditions of measurements,
+        \item restrictions of the sample set and its values,
+        \item your model in the class of models,
+        \item restrictions on the class of models,
+        \item the error function (and its inference) or a loss function, a quality criterion,
+        \item cross-validation procedure,
+        \item restrictions to the solutions,
+        \item external (industrial) quality criteria,
+        \item the optimization statement as argmin.
+    \end{itemize}
+    \item Define the main termini: what is called the model, the solution, and the algorithm.
+\end{itemize}
+
+\hrulefill
+
+Tips for problem statement
+Introduce the proper terminology. Note that:
+\begin{itemize}
+    \item The model is a parametric family of functions that map design space to target space.
+    \item The criterion (error function, metric) is a function to optimize and get an optimal solution (model parameters, a function).
+    \item The algorithm transforms solution space, usually iteratively.
+    \item The method combines a model, a criterion, and an algorithm to produce a solution. Check it:
+    \begin{itemize}
+        \item the regression model,
+        \item the sum of squared errors,
+        \item the Newton-Raphson algorithm,
+        \item the method of least squares.
+    \end{itemize}
+\end{itemize}
+
+\hrulefill
 
 In this thesis, we consider a standard \textbf{unconstrained minimization} problem in the context of linear regression. Let
 \[
@@ -60,7 +103,7 @@ Thus, the learning goal optimization $w$ that minimizes \eqref{eq:empirical-risk
   \min_{w \,\in\, \mathbb{R}^d} \quad 
   \frac{1}{2n}\|\mathbf{X}^\top w - \mathbf{X}^\top w^*\|^2,
 \]
-and is solved \emph{in-context} by the Memformer’s learned parameters and attention-based memory mechanism.
+and is solved \emph{in-context} by the Memformer's learned parameters and attention-based memory mechanism.
 
 
 \subsection{Lemma 1 \cite{ahn2024transformers}.}
