@@ -1,6 +1,6 @@
-# LLM Optimizer diploma project
+# Memformer for first order optimization methods
 Code for research project for my master diploma. Using LLM like optimizer for optimization problems
 
-Based on paper: [Memory-augmented Transformers can implement Linear First-Order Optimization Methods](https://arxiv.org/pdf/2410.07263)
+Based on paper: [Toward generalizable learning of all (linear) first-order methods via memory augmented Transformers](https://arxiv.org/abs/2410.07263v3)
 
-[Thesis text](https://www.overleaf.com/6447932552wnmhkzcssbsb#4737f8)
+[Dimploma text](./diploma/build/main.pdf)
