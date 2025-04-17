@@ -61,45 +61,54 @@ def attention(P,Q,Z, activation = None):
 # - P matrix at layer i, head j is allparam[i,j,0,:,:]
 # - Q matrix at layer i, head j is allparam[i,j,1,:,:]
 # If run_mode = 0 then training. If run_mode = 1 then in-context learning.
+# The Linear Transformer module
 class Transformer_F(nn.Module):
-    def __init__(self, n_layer, n_head, d, var, run_mode):
+    def __init__(self, n_layer, n_head, N, d, var, run_mode):
         super(Transformer_F, self).__init__()
         self.register_parameter('allparam', torch.nn.Parameter(torch.zeros(n_layer, n_head, 2, d, d)))
-        # Initialize gamma with requires_grad=False initially
-        self.gamma = nn.Parameter(torch.zeros(n_layer), requires_grad=False)
-        self.alpha = nn.Parameter(torch.ones(n_layer), requires_grad=False)
+
+        # Z has shape (B, N+1, d+1), so alpha and gamma should have the same shape
+        self.alpha = nn.Parameter(torch.zeros(n_layer, 1, N+1, d+1), requires_grad=(run_mode == 1))
+        self.gamma = nn.Parameter(torch.zeros(n_layer, 1, N+1, d+1), requires_grad=(run_mode == 1))
+
         with torch.no_grad():
-            self.allparam.normal_(0,var)
+            self.allparam.normal_(0, var)
+
         self.n_layer = n_layer
         self.n_head = n_head
         self.run_mode = run_mode
 
     def forward(self, Z):
-        R = torch.zeros_like(Z)
-        # Toggle gamma training based on run_mode
-        self.gamma.requires_grad = (self.run_mode == 1)
-        # Extract B, N and d values
         B, N, d = Z.shape[0], Z.shape[1]-1, Z.shape[2]-1
+
+        # Create a list for R, where each element corresponds to the dynamic memory for each layer
+        R = [torch.zeros_like(Z) for _ in range(self.n_layer)]
 
         # Enforce the sparsity condition before processing
         self.zero_p()
-        # Enforce the scalar multiple of identity condition on Q
-        self.identity_q()
 
         for i in range(self.n_layer):
+
             Zi = Z
             attention_sum = torch.zeros_like(Z)
-            # the forwarad map of each layer is given by F(Z) = Z + attention(Z)
-            for j in range(self.n_head):
-                Pij = self.allparam[i,j,0,:,:]
-                Qij = self.allparam[i,j,1,:,:]
-                attention_sum = attention_sum + attention(Pij,Qij,Zi)
 
+            alpha_i = self.alpha[i, :, :, :]
+            gamma_i = self.gamma[i, :, :, :]
+            # The forward map of each layer is given by F(Z) = Z + attention(Z)
+            for j in range(self.n_head):
+                Pij = self.allparam[i, j, 0, :, :]
+                Qij = self.allparam[i, j, 1, :, :]
+                attention_sum += attention(Pij, Qij, Zi)
+
+            # Update rule for training mode
             if self.run_mode == 0:
-                R = attention_sum
+                R[i] = attention_sum
+                Z = Zi + R[i]
+            # Update rule for in-context learning
             else:
-                R = R * self.gamma[i] + attention_sum
-            Z = Zi + R * self.alpha[i]
+                R[i] = attention_sum
+                Z = Zi + R[i] + sum(R[k] * self.alpha[k, :, :, :].expand(B, N+1, d+1) for k in range(i))
+
         return Z
 
     #enforces top-left-dxd-block sparsity on p
@@ -289,6 +298,12 @@ def generate_data_mlp(N=20, d=1, B=1000, hidden_dim=100):
 # In[ ]:
 
 
+get_ipython().system('cp /content/linear_transformer.py /content/')
+
+
+# In[ ]:
+
+
 import linear_transformer
 
 
@@ -395,7 +410,7 @@ for key in keys:
 
     # Set seed and initialize model
     torch.manual_seed(opt_seed)
-    model = Transformer_F(n_layer, 1, d, var, 0)
+    model = Transformer_F(n_layer, 1, N, d, var, 0)
     model.to(device)  # Move the model to the appropriate device
 
     # Initialize algorithm. Important: set beta = 0.9 for adam, 0.999 is very slow
@@ -446,61 +461,10 @@ for key in keys:
 ########################################################
 # compute test loss for trained linear Transformers
 ########################################################
-loss_dict_zero = {}
-store = 0
-for sd in seeds:
-    key = (sd,)
-    loss_dict_zero[key] = torch.zeros(4)
-    for n_layer in n_layers:
-        # Load parameters for given n_layer and seed
-        filename = cur_dir + filename_format.format(n_layer, N, sd)
-        hist = torch.load(filename)['hist']
-        U = torch.load(filename)['U']
-        D = torch.load(filename)['D']
-
-        # Validation set to find the best model and fine-tune gamma_param
-        np.random.seed(999)
-        torch.manual_seed(999)
-        Z_val, y_val = generate_data(mode, N, d, B, shape_k, U, D)
-        Z_val = Z_val.to(device)
-        y_val = y_val.to(device)
-        model = Transformer_F(n_layer, n_head, d, var, 0).to(device)
-
-        # Fine-tune gamma on the validation data
-        model.allparam.requires_grad = True
-
-        model.allparam.data.copy_(hist[-1])
-
-        # Use Adam optimizer for fine-tuning
-        optimizer = torch.optim.Adam([model.allparam], lr=lr)
-
-        fine_tune_iters = 1000
-        for t in range(fine_tune_iters):  # fine_tune_iters: number of fine-tuning steps
-            optimizer.zero_grad()
-            loss = in_context_loss(model, Z_val, y_val)
-            loss.backward()
-            optimizer.step()
-
-        # Generate new test data after fine-tuning gamma
-        np.random.seed(99)
-        torch.manual_seed(99)
-        Z_test, y_test = generate_data(mode, N, d, B, shape_k, U, D)
-        Z_test = Z_test.to(device)
-        y_test = y_test.to(device)
-
-        # Compute loss after fine-tuning and on the new test data
-        with torch.no_grad():
-            loss_dict_zero[key][n_layer - 1] = in_context_loss(model, Z_test, y_test).log().item()
-
-
-# In[ ]:
-
-
-########################################################
-# compute test loss for trained linear Transformers
-########################################################
 loss_dict = {}
 store = 0
+Z_val = 0
+y_val = 0
 for sd in seeds:
     key = (sd,)
     loss_dict[key] = torch.zeros(4)
@@ -511,16 +475,17 @@ for sd in seeds:
         U = torch.load(filename)['U']
         D = torch.load(filename)['D']
 
-        # Validation set to find the best model and fine-tune gamma_param
+        # Validation set to find the best model and fine-tune beta_param
         np.random.seed(999)
         torch.manual_seed(999)
         Z_val, y_val = generate_data(mode, N, d, B, shape_k, U, D)
         Z_val = Z_val.to(device)
         y_val = y_val.to(device)
-        model = Transformer_F(n_layer, n_head, d, var, 1).to(device)
+        model = Transformer_F(n_layer, n_head, N, d, var, 1).to(device)
 
-        # Fine-tune gamma on the validation data
+        # Fine-tune beta on the validation data
         model.alpha.requires_grad = True
+        #model.beta.requires_grad = True
         model.gamma.requires_grad = True
         model.allparam.requires_grad = True
 
@@ -536,16 +501,116 @@ for sd in seeds:
             loss.backward()
             optimizer.step()
 
-        # Generate new test data after fine-tuning gamma
-        np.random.seed(99)
-        torch.manual_seed(99)
-        Z_test, y_test = generate_data(mode, N, d, B, shape_k, U, D)
+        #loss = 100
+        #bestmodel = None
+        #for t in range(len(hist) - 20, len(hist)):
+        #    with torch.no_grad():
+        #        model.allparam.copy_(hist[t])
+        #    newloss = in_context_loss(model, Z_val, y_val).item()
+        #    if newloss < loss:
+        #        loss = newloss
+        #        bestmodel = hist[t]
+        #with torch.no_grad():
+        #    model.allparam.copy_(bestmodel)
+
+        # Generate new test data after fine-tuning beta
+        #np.random.seed(99)
+        #torch.manual_seed(99)
+        #Z_test, y_test = generate_data(mode, N, d, B, shape_k, U, D)
+        Z_test, y_test = Z_val, y_val
         Z_test = Z_test.to(device)
         y_test = y_test.to(device)
 
         # Compute loss after fine-tuning and on the new test data
         with torch.no_grad():
             loss_dict[key][n_layer - 1] = in_context_loss(model, Z_test, y_test).log().item()
+
+        #model.alpha.data.zero_()
+        # Compute loss with alpha = 0
+        #with torch.no_grad():
+        #    loss_dict_zero[key][n_layer - 1] = in_context_loss(model, Z_test, y_test).log().item()
+
+# Save the final beta parameter after fine-tuning
+#torch.save({'beta': model.beta.clone().detach()}, 'beta_finetuned.pth')
+
+
+# In[ ]:
+
+
+########################################################
+# compute test loss for trained linear Transformers
+########################################################
+loss_dict_zero = {}
+store = 0
+Z_val = 0
+y_val = 0
+for sd in seeds:
+    key = (sd,)
+    loss_dict_zero[key] = torch.zeros(4)
+    for n_layer in n_layers:
+        # Load parameters for given n_layer and seed
+        filename = cur_dir + filename_format.format(n_layer, N, sd)
+        hist = torch.load(filename)['hist']
+        U = torch.load(filename)['U']
+        D = torch.load(filename)['D']
+
+        # Validation set to find the best model and fine-tune beta_param
+        np.random.seed(999)
+        torch.manual_seed(999)
+        Z_val, y_val = generate_data(mode, N, d, B, shape_k, U, D)
+        Z_val = Z_val.to(device)
+        y_val = y_val.to(device)
+        model = Transformer_F(n_layer, n_head, N, d, var, 0).to(device)
+
+        # Fine-tune beta on the validation data
+        model.alpha.requires_grad = False
+        #model.beta.requires_grad = True
+        model.gamma.requires_grad = True
+        model.allparam.requires_grad = True
+
+        model.allparam.data.copy_(hist[-1])
+
+        # Use Adam optimizer for fine-tuning
+        optimizer = torch.optim.Adam([model.allparam], lr=lr)
+
+        fine_tune_iters = 1000
+        for t in range(fine_tune_iters):  # fine_tune_iters: number of fine-tuning steps
+            optimizer.zero_grad()
+            loss = in_context_loss(model, Z_val, y_val)
+            loss.backward()
+            optimizer.step()
+
+        #loss = 100
+        #bestmodel = None
+        #for t in range(len(hist) - 20, len(hist)):
+        #    with torch.no_grad():
+        #        model.allparam.copy_(hist[t])
+        #    newloss = in_context_loss(model, Z_val, y_val).item()
+        #    if newloss < loss:
+        #        loss = newloss
+        #        bestmodel = hist[t]
+        #with torch.no_grad():
+        #    model.allparam.copy_(bestmodel)
+
+        # Generate new test data after fine-tuning beta
+        np.random.seed(99)
+        torch.manual_seed(99)
+        Z_test, y_test = generate_data(mode, N, d, B, shape_k, U, D)
+        #Z_test, y_test = Z_val, y_val
+        Z_test = Z_test.to(device)
+        y_test = y_test.to(device)
+
+        # Compute loss after fine-tuning and on the new test data
+        #with torch.no_grad():
+        #    loss_dict[key][n_layer - 1] = in_context_loss(model, Z_test, y_test).log().item()
+
+        model.alpha.data.zero_()
+        # Compute loss with alpha = 0
+        with torch.no_grad():
+            loss_dict_zero[key][n_layer - 1] = in_context_loss(model, Z_test, y_test).log().item()
+
+# Save the final beta parameter after fine-tuning
+#torch.save({'beta': model.beta.clone().detach()}, 'beta_finetuned.pth')
 
 
 # In[ ]:
@@ -554,29 +619,36 @@ for sd in seeds:
 import torch
 import numpy as np
 
-# Conjugate Gradient Descent function
-def do_cgd(Z, eta, numstep):
+# Nesterov's Accelerated Gradient Descent
+def do_nag(Z, numstep, alphas, betas):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     N = Z.shape[0] - 1
     X = Z[0:N-1, 0:5]
     Y = Z[0:N-1, 5]
     w = torch.zeros(X.shape[1]).to(device)
 
-    # Initial gradient and direction
-    r = torch.einsum('ik,ij,j->k', X, X, w) - torch.einsum('ik,i->k', X, Y)
-    p = -r
+    v = w.clone()
+
+    eta = 0.03  # Learning rate
 
     for k in range(numstep):
-        Xp = torch.einsum('ik,ij,j->k', X, X, p)
-        alpha = torch.dot(r, r) / torch.dot(p, Xp)
-        w = w + alpha * p  # Update the weight
+        # Compute gradient at the extrapolated point v
+        residual = torch.matmul(X, v) - Y  # Compute X v - Y
+        grad = torch.matmul(X.t(), residual)   # Compute X^T (X v - Y)
 
-        r_new = r + alpha * Xp
-        beta = torch.dot(r_new, r_new) / torch.dot(r, r)
-        p = -r_new + beta * p  # Update direction
+        w_new = v - eta * grad  # Gradient descent step
 
-        r = r_new
+        beta = 0.9
+        betas.append(beta)  # Store the beta value
 
-    return w
+        v = w_new + beta * (w_new - w)  # Update the extrapolated point
+
+        alphas.append(eta)  # Store the learning rate (constant in this case)
+
+        w = w_new  # Update the weights
+
+    return w  # Return the final weight matrix
 
 # Evaluation function for an instance
 def eval_w_instance(Z, Ytest, w):
@@ -588,8 +660,15 @@ def eval_w_instance(Z, Ytest, w):
 # Initialization of loss matrix
 gd_loss_matrix = torch.zeros(len(seeds), 4)
 
-# Main loop to find the best eta and evaluate performance
+average_alphas_per_layer = []
+average_betas_per_layer = []
+
+# Main loop to evaluate performance
 for n_layer in n_layers:
+
+    alphas = []  # Initialize alpha list
+    betas = []   # Initialize beta list
+
     # First, find the best eta
     sd = 1
     best_loss = 10000
@@ -605,27 +684,9 @@ for n_layer in n_layers:
     np.random.seed(999)
     torch.manual_seed(999)
     Z, y = generate_data(mode, N, d, B, shape_k, U, D)
+    #Z, y = Z_val, y_val
     Z = Z.to(device)
     y = y.to(device)
-
-    # Done generating data
-
-    for eta in [0.008, 0.01, 0.02, 0.04, 0.08, 0.16]:
-        ### Start of evaluate mean loss ###
-        total_loss = 0
-        for i in range(Z.shape[0]):
-            Zi = Z[i, :, :]
-            Ytesti = y[i]
-            w = do_cgd(Zi, eta, numstep)  # Use do_cgd instead of do_gd
-            gd_loss, gd_pred = eval_w_instance(Zi, Ytesti, w)
-            total_loss = total_loss + gd_loss
-        mean_loss = total_loss / 5000
-        ### End of evaluate mean loss ###
-        print('eta: {}, loss: {}'.format(eta, mean_loss))
-        if (mean_loss < best_loss):
-            best_eta = eta
-            best_loss = mean_loss
-    print('best eta: {} for n_layer={}'.format(best_eta, n_layer))
 
     # Now do actual evaluation
     for sd in seeds:
@@ -638,22 +699,29 @@ for n_layer in n_layers:
         # Generate test data
         torch.manual_seed(sd)
         Z, y = generate_data(mode, N, d, B, shape_k, U, D)
+        #Z, y = Z_val, y_val
         Z = Z.to(device)
         y = y.to(device)
 
         # Done generating data
-        eta = best_eta
+        #eta = best_eta
 
         ### Start of evaluate mean loss ###
         total_loss = 0
         for i in range(Z.shape[0]):
             Zi = Z[i, :, :]
             Ytesti = y[i]
-            w = do_cgd(Zi, eta, numstep)  # Use do_cgd instead of do_gd
+            w = do_nag(Zi, numstep, alphas, betas)  # Use do_cgd instead of do_gd
             gd_loss, gd_pred = eval_w_instance(Zi, Ytesti, w)
             total_loss = total_loss + gd_loss
         mean_loss = total_loss / Z.shape[0]
         gd_loss_matrix[sd, n_layer-1] = mean_loss
+
+    average_alpha = sum(alphas) / len(alphas)
+    average_alphas_per_layer.append(average_alpha)
+
+    average_beta = sum(betas) / len(betas)
+    average_betas_per_layer.append(average_beta)
 
 # Compute mean and std of log test loss for plotting
 gd_loss_mean = gd_loss_matrix.log().mean(dim=0)
@@ -686,13 +754,13 @@ for idx, key in enumerate(keys):
 losses_mean_zero = torch.mean(losses_zero, axis=0)
 losses_std_zero = torch.std(losses_zero, axis=0)/10
 
-plt.plot(n_layers, gd_loss_mean, color='blue', label='Conjugate Gradient Descent')
+plt.plot(n_layers, gd_loss_mean, color='blue', label='Nesterov Accelerated Gradient Descent')
 plt.fill_between(n_layers, gd_loss_mean - gd_loss_std/10, gd_loss_mean + gd_loss_std/10, color='blue', alpha=0.2)
 
-ax.plot(n_layers, losses_mean, color = 'red', lw = 3, label='Memformer with CGD')
+ax.plot(n_layers, losses_mean, color = 'red', lw = 3, label='LFOM Memformer')
 ax.fill_between(n_layers, losses_mean-losses_std, losses_mean+losses_std, color = 'red', alpha = 0.2)
 
-ax.plot(n_layers, losses_mean_zero, color = 'green', lw = 3, label='Linear Transformer')
+ax.plot(n_layers, losses_mean_zero, color = 'green', lw = 3, label='Linear Transformer (Pre)')
 ax.fill_between(n_layers, losses_mean_zero-losses_std_zero, losses_mean_zero+losses_std_zero, color = 'green', alpha = 0.2)
 
 plt.ylabel('log(Loss)',fontsize=30)
