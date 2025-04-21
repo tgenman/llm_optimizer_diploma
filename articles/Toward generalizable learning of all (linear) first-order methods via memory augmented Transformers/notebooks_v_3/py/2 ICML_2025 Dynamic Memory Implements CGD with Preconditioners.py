@@ -1,21 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
-
-
-###########################################
-# This file contains the following:
-# 1. Linear Transformer Model
-# 2. Function for clipping gradient
-# 3. Function for generating random data
-###########################################
-
-
 import torch
 from torch import nn
 import numpy as np
-from utils_lib import attention
+from utils_lib import attention, in_context_loss
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -94,15 +83,6 @@ class Transformer_F(nn.Module):
 
                     # Safely copy the modified tensor back to allparam
                     self.allparam[i,j,1,:,:].copy_(Qij)
-
-# evaluate the loss of model, given data (Z,y)
-def in_context_loss(model, Z, y):
-    N = Z.shape[1]-1
-    d = Z.shape[2]-1
-    output = model(Z)
-    diff = output[:,N,d]+y
-    loss = ((diff)**2).mean()
-    return loss
 
 # generate random data for linear regression
 # mode: distribution of samples to generate. Currently supports 'normal', 'gamma', 'sphere'
@@ -254,14 +234,6 @@ def generate_data_mlp(N=20, d=1, B=1000, hidden_dim=100):
     return Z, y_test
 
 
-# In[ ]:
-
-
-import linear_transformer
-
-
-# In[ ]:
-
 
 import torch
 from matplotlib import pyplot as plt
@@ -279,8 +251,6 @@ import math
 #use cuda if available, else use cpu
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #torch.cuda.set_device(1)
-# import the model and some useful functions
-from linear_transformer import Transformer_F, attention, generate_data, in_context_loss, generate_data_inplace
 
 # set up some print options
 np.set_printoptions(precision = 2, suppress = True)

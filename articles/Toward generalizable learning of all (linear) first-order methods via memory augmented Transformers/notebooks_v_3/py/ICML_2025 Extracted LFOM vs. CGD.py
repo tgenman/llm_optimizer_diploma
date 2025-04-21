@@ -15,7 +15,7 @@
 import torch
 from torch import nn
 import numpy as np
-from utils_lib import attention
+from utils_lib import attention, in_context_loss
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -79,14 +79,6 @@ class Transformer_F(nn.Module):
                 with torch.no_grad():
                     self.allparam[i,j,0,:,:].zero_()
 
-# evaluate the loss of model, given data (Z,y)
-def in_context_loss(model, Z, y):
-    N = Z.shape[1]-1
-    d = Z.shape[2]-1
-    output = model(Z)
-    diff = output[:,N,d]+y
-    loss = ((diff)**2).mean()
-    return loss
 
 # generate random data for linear regression
 # mode: distribution of samples to generate. Currently supports 'normal', 'gamma', 'sphere'
