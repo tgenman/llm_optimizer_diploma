@@ -224,3 +224,16 @@ def generate_data_mlp(N=20, d=1, B=1000, hidden_dim=100, device=None):
 
     return Z, y_test
 
+# a convenience function for taking a step and clipping
+def clip_and_step(allparam, optimizer, clip_r = None):
+    norm_p=None
+    grad_all = allparam.grad
+    if clip_r is not None:
+        for l in range(grad_all.shape[0]):
+            for h in range(grad_all.shape[1]):
+                for t in range(grad_all.shape[2]):
+                    norm_p = grad_all[l,h,t,:,:].norm().item()
+                    if norm_p > clip_r:
+                        grad_all[l,h,t,:,:].mul_(clip_r/norm_p)
+    optimizer.step()
+    return norm_p

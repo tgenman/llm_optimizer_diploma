@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import os
+import time
+import numpy as np
 import torch
 from torch import nn
-import numpy as np
-from utils_lib import attention, in_context_loss
+from matplotlib import pyplot as plt
+from utils_lib import attention, in_context_loss, generate_data, generate_data_inplace, clip_and_step
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
