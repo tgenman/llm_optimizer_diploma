@@ -14,7 +14,7 @@
 import torch
 from torch import nn
 import numpy as np
-from utils_lib import attention, in_context_loss, generate_data, generate_data_inplace, clip_and_step
+from utils_lib import attention, in_context_loss, generate_data, generate_data_inplace
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

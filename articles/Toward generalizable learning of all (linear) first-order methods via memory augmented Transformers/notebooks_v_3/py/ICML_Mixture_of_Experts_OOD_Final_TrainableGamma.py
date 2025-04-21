@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from torch import nn
 from matplotlib import pyplot as plt
-from utils_lib import attention, in_context_loss, generate_data, generate_data_inplace, clip_and_step
+from utils_lib import attention, in_context_loss, generate_data, generate_data_inplace
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -373,19 +373,6 @@ max_iters = 10  # Number of Iterations to run
 hist_stride = 1  # stride for saved model paramters in `train.ipynb'
 stride = 100
 
-# a convenience function for taking a step and clipping
-def clip_and_step(allparam, optimizer, clip_r = None):
-    norm_p=None
-    grad_all = allparam.grad
-    if clip_r is not None:
-        for l in range(grad_all.shape[0]):
-            for h in range(grad_all.shape[1]):
-                for t in range(grad_all.shape[2]):
-                    norm_p = grad_all[l,h,t,:,:].norm().item()
-                    if norm_p > clip_r:
-                        grad_all[l,h,t,:,:].mul_(clip_r/norm_p)
-    optimizer.step()
-    return norm_p
 
 #format for saving run data
 filename_format = '/variable_L_hist_{}_{}_{}.pth'
